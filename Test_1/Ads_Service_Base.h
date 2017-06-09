@@ -18,6 +18,7 @@
 
 #ifndef ADS_SERVICE_BASE_H
 #define ADS_SERVICE_BASE_H
+//#include "Ads_Types.h"
 #include <string>
 #include <sstream>
 #include <list>
@@ -39,7 +40,245 @@
 #include <math.h>
 #include <errno.h>
 
-#include "Ads_Types.h"
+#include <arpa/inet.h>	// inet_ntoa
+#include <sys/syscall.h>
+
+#include <unistd.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <dlfcn.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/file.h>
+#include <assert.h>
+#define ADS_ASSERT(a) assert(a)
+typedef std::string Ads_String;
+
+namespace ads {
+	struct Time_Value {
+		Time_Value() { this->tv_.tv_sec = 0; this->tv_.tv_usec = 0; }
+		explicit Time_Value(const timeval& tv) { this->tv_.tv_sec = tv.tv_sec; this->tv_.tv_usec = tv.tv_usec; }
+		explicit Time_Value(time_t sec, suseconds_t usec = 0) { this->tv_.tv_sec = sec; this->tv_.tv_usec = usec; }
+
+		void set (time_t sec, suseconds_t usec = 0) { this->tv_.tv_sec = sec; this->tv_.tv_usec = usec; }
+
+		time_t sec() const { return this->tv_.tv_sec; }
+		suseconds_t usec() const { return this->tv_.tv_usec; }
+		time_t msec() const { return this->tv_.tv_sec * 1000 + this->tv_.tv_usec / 1000; }
+
+		timeval tv_;
+
+		const Time_Value& operator -=(const Time_Value& that)
+		{
+			this->tv_.tv_sec -= that.tv_.tv_sec;
+			this->tv_.tv_usec -= that.tv_.tv_usec;
+			return *this;
+		}
+
+		const Time_Value& operator +=(const Time_Value& that)
+		{
+			this->tv_.tv_sec += that.tv_.tv_sec;
+			this->tv_.tv_usec += that.tv_.tv_usec;
+			return *this;
+		}
+	};
+	inline ads::Time_Value
+	gettimeofday() {
+		timeval tv;
+		return ::gettimeofday(&tv, 0) < 0? ads::Time_Value(time_t(0)): ads::Time_Value(tv);
+	}
+	class Mutex {
+		public:
+			Mutex()
+			{
+				::pthread_mutexattr_init(&ma_);
+				::pthread_mutexattr_settype(&ma_, PTHREAD_MUTEX_RECURSIVE);
+				::pthread_mutex_init(&mu_, &ma_);
+			}
+			~Mutex()
+			{
+				::pthread_mutex_destroy(&mu_);
+				::pthread_mutexattr_destroy(&ma_);
+			}
+
+			int acquire()
+			{
+				//time_t t0 = ads::gettimeofday().msec();
+				::pthread_mutex_lock(&mu_);
+				//time_t t1 = ads::gettimeofday().msec();
+				//if (t1 - t0 > 300)
+				//ads::print_stacktrace();
+
+				return 0;
+			}
+			int release() 	{ ::pthread_mutex_unlock(&mu_); return 0; }
+
+		private:
+			pthread_mutexattr_t ma_;
+			pthread_mutex_t mu_;
+
+			Mutex(const Mutex&);
+			const Mutex& operator = (const Mutex&);
+
+			friend class Condition_Var;
+	};
+	class Condition_Var {
+		public:
+			explicit Condition_Var(Mutex& m): mu_(m) { ::pthread_cond_init(&cv_, NULL); }
+			~Condition_Var() { ::pthread_cond_destroy(&cv_); }
+
+			int wait() 		{ ::pthread_cond_wait(&cv_, &mu_.mu_); return 0; }
+			int signal()	{ ::pthread_cond_signal(&cv_);  return 0; }
+			int broadcast() { ::pthread_cond_broadcast(&cv_); return 0; }
+
+		private:
+			pthread_cond_t cv_;
+			Mutex& mu_;
+
+			Condition_Var(const Condition_Var&);
+			const Condition_Var& operator = (const Condition_Var&);
+	};
+	class Guard {
+		public:
+			explicit Guard(Mutex& m): mu_(m) { mu_.acquire(); }
+			~Guard() 				{ mu_.release(); }
+
+		private:
+			Mutex& mu_;
+
+			Guard(const Guard&);
+			const Guard& operator = (const Guard&);
+	};
+	template <typename T> class TSS {
+		public:
+			TSS() { ::pthread_key_create(&key_, cleanup); }
+			~TSS() {}
+
+			T *get() const {
+				void *data = ::pthread_getspecific(key_);
+				if(data) return (T *)data;
+
+				T *t = new T();
+				::pthread_setspecific(key_, t);
+				return t;
+			}
+
+			T* operator->() {  return get();  }
+			operator T *(void) const { return get(); }
+
+			static void cleanup(void *p) { delete(T *)p; }
+		private:
+			pthread_key_t key_;
+	};
+
+	template <typename T>
+	class Message_Queue {
+		public:
+		Message_Queue(int capacity=-1)
+			: mutex_(), not_full_cond_(mutex_), not_empty_cond_(mutex_), empty_cond_(mutex_),  count_(0), capacity_(size_t(capacity)), active_(true) {}
+
+		int enqueue(T *t, bool front = false, bool wait = true)
+		{
+			mutex_.acquire();
+			if (! active_)
+			{
+				mutex_.release();
+				return -1;
+			}
+
+			while (count_ >= capacity_)
+			{
+				if (! wait || !active_)
+				{
+					mutex_.release();
+					return -1;
+				}
+
+				not_full_cond_.wait();
+			}
+			if (front) items_.push_front(t);
+			else items_.push_back(t);
+			++count_;
+			not_empty_cond_.signal();
+			mutex_.release();
+			return 0;
+		}
+
+		int dequeue(T *&t, bool front = true, bool wait = true, bool active_only = true)
+		{
+			mutex_.acquire();
+
+			if (active_only)
+			{
+				if (! active_)
+				{
+					mutex_.release();
+					return -1;
+				}
+			}
+
+			while (items_.empty())
+			{
+				empty_cond_.signal();
+				if (! wait || !active_)
+				{
+					mutex_.release();
+					return -1;
+				}
+
+				not_empty_cond_.wait();
+			}
+
+			if (front) { t = items_.front(); items_.pop_front(); }
+			else { t = items_.back(); items_.pop_back(); }
+			--count_;
+			not_full_cond_.signal();
+			mutex_.release();
+			return 0;
+		}
+
+		void wait_for_empty()
+		{
+			ads::Guard __g(mutex_);
+			if(!items_.empty())
+			{
+				empty_cond_.wait();
+			}
+		}
+
+		size_t message_count() const { return count_; }
+
+		bool is_empty()
+		{
+			ads::Guard __g(mutex_);
+			return items_.empty();
+		}
+
+		void deactivate()
+		{
+			mutex_.acquire();
+			active_ = false;
+			not_full_cond_.broadcast();
+			not_empty_cond_.broadcast();
+			mutex_.release();
+		}
+
+		void capacity(size_t cap) { this->capacity_ = cap; }
+
+		private:
+		Mutex mutex_;
+		Condition_Var not_full_cond_, not_empty_cond_, empty_cond_;
+
+		std::list<T *> items_;
+		size_t count_;
+		size_t capacity_;
+		bool active_;
+	};
+}
+
 class Ads_Message_Base {
 public:
 	enum PRIORITY {
@@ -53,7 +292,7 @@ public:
 		MESSAGE_EXIT = 0,
 		MESSAGE_IDLE = 1,
 		MESSAGE_SERVICE = 100,
-		MESSAGE_CURTAIL_THREADPOOL_SIZE = 200
+		MESSAGE_CURTAIL_TP_SIZE = 200
 	};
 
 	typedef int TYPE;
@@ -99,7 +338,8 @@ public:
 	/* zxliu temporary modification */
 	virtual int extend_threadpool_size();
 	virtual int curtail_threadpool_size();
-	virtual void *supervisor_func();
+	static void *supervisor_func_run(void *arg);
+	virtual int supervisor_func();
 
 	int wait();
 

@@ -86,11 +86,11 @@ namespace ads {
 
 	inline size_t __stl_hash_string(const char* __s)
 	{
-#if __APPLE__
+		#if __APPLE__
 		return __stl_hash_string(__s);
-#else
+		#else
 		return __gnu_cxx::__stl_hash_string(__s);
-#endif
+		#endif
 	}
 
 	inline size_t __stl_hash_string(const Ads_String& s) { return __stl_hash_string(s.c_str()); }
@@ -106,16 +106,14 @@ namespace ads {
 #define compat __gnu_cxx
 #include <tr1/memory>		// tr1::shared_ptr
 #define nullptr 0
-namespace std
-{
+namespace std {
 	using namespace tr1;
 };
 
 #include <ext/hash_map>
 #include <ext/hash_set>
 
-namespace ads
-{
+namespace ads {
 	using __gnu_cxx::hash_map;
 	using __gnu_cxx::hash_multimap;
 	using __gnu_cxx::hash_set;
@@ -126,8 +124,7 @@ namespace ads
 	}
 }
 
-namespace compat
-{
+namespace compat {
 	template<> struct hash<std::string>
     {
         #if defined(__APPLE__)
@@ -140,8 +137,7 @@ namespace compat
 
 #endif
 
-namespace ads
-{
+namespace ads {
 	inline size_t djb2_hash(const char *str)
     {
         size_t hash = 5381;
@@ -156,8 +152,7 @@ namespace ads
 
 };
 
-namespace compat
-{
+namespace compat {
 	template<> struct hash<void *>
 	{
 		size_t operator()(void *__x) const
@@ -166,8 +161,8 @@ namespace compat
 		}
 	};
 
-#if __cplusplus < 201103L
-#if !defined(__WORDSIZE) || __WORDSIZE != 64 || __APPLE__
+	#if __cplusplus < 201103L
+	#if !defined(__WORDSIZE) || __WORDSIZE != 64 || __APPLE__
 	template<> struct hash<Ads_GUID>
 	{
 		 size_t operator()(Ads_GUID __x) const
@@ -175,8 +170,8 @@ namespace compat
 			 return (size_t)(__x);
 		 }
 	};
-#endif
-#endif
+	#endif
+	#endif
 
 	template<> struct hash<Ads_GUID_Pair >
 	{
@@ -194,7 +189,7 @@ namespace compat
 #define ADS_GUID_PAIR_HASH_COMPARE Ads_GUID_Pair_Hash, std::equal_to<Ads_GUID_Pair>
 typedef std::shared_ptr<Ads_String> Ads_Message_Block;
 
-#include "protobuf/User_State.pb.h"
+#include "User_State.pb.h"
 typedef std::shared_ptr<ads::User_State> Ads_User_State_Ptr;
 
 #include <unistd.h>
@@ -210,8 +205,7 @@ typedef std::shared_ptr<ads::User_State> Ads_User_State_Ptr;
 
 #define PROT_RDWR (PROT_READ|PROT_WRITE)
 
-namespace ads
-{
+namespace ads {
 	enum ENVIRONMENT
 	{
 		ENV_NONE = 0,
@@ -304,14 +298,14 @@ namespace ads
 		return (! s.empty() && s.find_first_not_of("0123456789") == STRING::npos);
 	}
 
-/// copy from multi_cpu_increment in ace/Atomic_Op.cpp
+	/// copy from multi_cpu_increment in ace/Atomic_Op.cpp
 	inline long exchange(volatile long *value, long rhs)
 	{
 		unsigned long addr = reinterpret_cast<unsigned long>(value);
-#if defined(__GNUC__)
+		#if defined(__GNUC__)
 		// The XCHG instruction automatically follows LOCK semantics
 		asm volatile ("xchg %0, (%1)" : "+r"(rhs) : "r"(addr));
-#endif
+		#endif
 		return rhs;
 	}
 
@@ -429,8 +423,7 @@ namespace ads
 #define ADS_APPLY_MAGNIFIED_PERCENTAGE(a, b)		((int64_t)((a) * ADS_TO_REAL_PERCENTAGE(b)))
 #define ADS_APPLY_REVERSE_MAGNIFIED_PERCENTAGE(a, b)	((a) / ADS_TO_REAL_PERCENTAGE(b))
 
-namespace std
-{
+namespace std {
 	template <>
 	struct equal_to<const char *>: public binary_function<const char *, const char *, bool>
 	{
@@ -441,8 +434,7 @@ namespace std
 	};
 };
 
-struct Ads_GUID_Hash
-{
+struct Ads_GUID_Hash {
 	size_t
 	operator()(Ads_GUID id) const
 	{
@@ -455,8 +447,7 @@ struct Ads_GUID_Hash
 	}
 };
 
-struct Ads_GUID_Pair_Hash
-{
+struct Ads_GUID_Pair_Hash {
 	size_t operator()(const Ads_GUID_Pair& k) const
 	{
 		return (size_t)(ads::entity::id(k.first) << 16 | ads::entity::id(k.second));
@@ -473,8 +464,7 @@ typedef ads::hash_set<Ads_GUID> Ads_GUID_HSet;
 #define AVOIDANCE_NETWORK_DEFAULT (-2)
 #define AVOIDANCE_MAX_LEVEL (3 + 1)
 
-enum LOG_PRIORITY
-{
+enum LOG_PRIORITY {
 	LP_TRACE = 0x0001,
 	LP_DEBUG = 0x0002,
 	LP_INFO = 0x0004,
@@ -483,10 +473,8 @@ enum LOG_PRIORITY
 	LP_CRIT = 0x0020
 };
 
-namespace ads
-{
-	inline const char * log_priority_name(int priority)
-	{
+namespace ads {
+	inline const char * log_priority_name(int priority) {
 		switch(priority)
 		{
 		case LP_TRACE:
@@ -541,7 +529,7 @@ namespace ads
         return p1;
     }
 
-// require V operator +=
+	// require V operator +=
 	template <typename M1, typename M2>
 	static void merge_delta(M1& large, const M2& small)
 	{
@@ -774,7 +762,7 @@ namespace ads
 	inline Ads_String
 	to_hex_string(const char *buf, size_t length)
 	{
-#define C2H(c) ((c) < 10)? (c) + '0' : ((c) <= 0x0F)? (c) - 10 + 'a' : '-'
+		#define C2H(c) ((c) < 10)? (c) + '0' : ((c) <= 0x0F)? (c) - 10 + 'a' : '-'
 		Ads_String s;
 		s.resize(2 * length);
 		for(size_t i=0; i<length; i++)
@@ -786,7 +774,7 @@ namespace ads
 		}
 		s[length * 2] = '\0';
 		return s;
-#undef C2H
+		#undef C2H
 	}
 
 	template <typename I>
@@ -806,7 +794,7 @@ namespace ads
 	inline size_t
 	from_hex_string(const Ads_String &s, char *buf, size_t length)
 	{
-#define H2C(c) ((c) >= '0' && (c) <= '9')? (c) - '0' : ((c) >= 'A' && (c) <= 'F')? (c) - 'A' + 10 : ((c) >= 'a' && (c) <= 'f')? (c) - 'a' + 10 : (-1)
+		#define H2C(c) ((c) >= '0' && (c) <= '9')? (c) - '0' : ((c) >= 'A' && (c) <= 'F')? (c) - 'A' + 10 : ((c) >= 'a' && (c) <= 'f')? (c) - 'a' + 10 : (-1)
 		if(s.length() %2 != 0 || length < s.length() / 2)
 			return -1;
 
@@ -822,7 +810,7 @@ namespace ads
 		}
 
 		return s.length() / 2;
-#undef H2C
+		#undef H2C
 	}
 
 
@@ -1040,7 +1028,7 @@ namespace ads
 	Ads_String string_date_time(time_t t);
 	Ads_String string_date_time_(time_t t);
 
-#define DEFAULT_TIME_FORMAT ("%Y%m%d%H%M%S")
+	#define DEFAULT_TIME_FORMAT ("%Y%m%d%H%M%S")
 	inline time_t str_to_time(const char *s, const char *format = DEFAULT_TIME_FORMAT)
 	{
 		struct tm tm = {0};
@@ -1066,8 +1054,7 @@ namespace ads
 	inline Ads_String string_date_time_(time_t t) { return time_to_str("%Y-%m-%d %H:%M:%S", t); }
 }
 
-namespace json
-{
+namespace json {
 	class Object;
 	class ObjectP;
 	class Array;
@@ -1094,8 +1081,7 @@ namespace json
 #define MAP_LOCKED 0
 #endif
 
-namespace ads
-{
+namespace ads {
 	struct Time_Value
 	{
 		Time_Value() { this->tv_.tv_sec = 0; this->tv_.tv_usec = 0; }
@@ -1197,9 +1183,8 @@ namespace ads
 		}
 	};
 
-	class Mem_Map
-	{
-	public:
+	class Mem_Map {
+		public:
 		Mem_Map() : base_addr_(MAP_FAILED), length_(0), handle_(-1) {}
 		~Mem_Map() { close(); }
 
@@ -1330,16 +1315,15 @@ namespace ads
 		size_t size() const 	{ return this->length_; }
 		int handle() const		{ return this->handle_; }
 
-	private:
+		private:
 		void *base_addr_;
 		size_t length_;
 
 		int handle_;
 	};
 
-	class DLL
-	{
-	public:
+	class DLL {
+		public:
 		DLL() : handle_(NULL) {}
 		~DLL() { close(); }
 
@@ -1361,107 +1345,101 @@ namespace ads
 			return  handle_? ::dlsym(handle_, name): NULL;
 		}
 
-	private:
+		private:
 		void *handle_;
 	};
 
 	inline ads::Time_Value
-	gettimeofday()
-	{
+	gettimeofday() {
 		timeval tv;
 		return ::gettimeofday(&tv, 0) < 0? ads::Time_Value(time_t(0)): ads::Time_Value(tv);
 	}
 
-	class Mutex
-	{
-	public:
-		Mutex()
-		{
-			::pthread_mutexattr_init(&ma_);
-			::pthread_mutexattr_settype(&ma_, PTHREAD_MUTEX_RECURSIVE);
-			::pthread_mutex_init(&mu_, &ma_);
-		}
-		~Mutex()
-		{
-			::pthread_mutex_destroy(&mu_);
-			::pthread_mutexattr_destroy(&ma_);
-		}
+	class Mutex {
+		public:
+			Mutex()
+			{
+				::pthread_mutexattr_init(&ma_);
+				::pthread_mutexattr_settype(&ma_, PTHREAD_MUTEX_RECURSIVE);
+				::pthread_mutex_init(&mu_, &ma_);
+			}
+			~Mutex()
+			{
+				::pthread_mutex_destroy(&mu_);
+				::pthread_mutexattr_destroy(&ma_);
+			}
 
-		int acquire()
-		{
-//			time_t t0 = ads::gettimeofday().msec();
-			::pthread_mutex_lock(&mu_);
-//			time_t t1 = ads::gettimeofday().msec();
-//			if (t1 - t0 > 300)
-//				ads::print_stacktrace();
+			int acquire()
+			{
+				//time_t t0 = ads::gettimeofday().msec();
+				::pthread_mutex_lock(&mu_);
+				//time_t t1 = ads::gettimeofday().msec();
+				//if (t1 - t0 > 300)
+				//ads::print_stacktrace();
 
-			return 0;
-		}
-		int release() 	{ ::pthread_mutex_unlock(&mu_); return 0; }
+				return 0;
+			}
+			int release() 	{ ::pthread_mutex_unlock(&mu_); return 0; }
 
-	private:
-		pthread_mutexattr_t ma_;
-		pthread_mutex_t mu_;
+		private:
+			pthread_mutexattr_t ma_;
+			pthread_mutex_t mu_;
 
-		Mutex(const Mutex&);
-		const Mutex& operator = (const Mutex&);
+			Mutex(const Mutex&);
+			const Mutex& operator = (const Mutex&);
 
-		friend class Condition_Var;
+			friend class Condition_Var;
 	};
 
-	class Condition_Var
-	{
-	public:
-		explicit Condition_Var(Mutex& m): mu_(m) { ::pthread_cond_init(&cv_, NULL); }
-		~Condition_Var() { ::pthread_cond_destroy(&cv_); }
+	class Condition_Var {
+		public:
+			explicit Condition_Var(Mutex& m): mu_(m) { ::pthread_cond_init(&cv_, NULL); }
+			~Condition_Var() { ::pthread_cond_destroy(&cv_); }
 
-		int wait() 		{ ::pthread_cond_wait(&cv_, &mu_.mu_); return 0; }
-		int signal()	{ ::pthread_cond_signal(&cv_);  return 0; }
-		int broadcast() { ::pthread_cond_broadcast(&cv_); return 0; }
+			int wait() 		{ ::pthread_cond_wait(&cv_, &mu_.mu_); return 0; }
+			int signal()	{ ::pthread_cond_signal(&cv_);  return 0; }
+			int broadcast() { ::pthread_cond_broadcast(&cv_); return 0; }
 
-	private:
-		pthread_cond_t cv_;
-		Mutex& mu_;
+		private:
+			pthread_cond_t cv_;
+			Mutex& mu_;
 
-		Condition_Var(const Condition_Var&);
-		const Condition_Var& operator = (const Condition_Var&);
+			Condition_Var(const Condition_Var&);
+			const Condition_Var& operator = (const Condition_Var&);
 	};
 
-	class Guard
-	{
-	public:
-		explicit Guard(Mutex& m): mu_(m) { mu_.acquire(); }
-		~Guard() 				{ mu_.release(); }
+	class Guard {
+		public:
+			explicit Guard(Mutex& m): mu_(m) { mu_.acquire(); }
+			~Guard() 				{ mu_.release(); }
 
-	private:
-		Mutex& mu_;
+		private:
+			Mutex& mu_;
 
-		Guard(const Guard&);
-		const Guard& operator = (const Guard&);
-	};
+			Guard(const Guard&);
+			const Guard& operator = (const Guard&);
+		};
 
-	class Guard_Pointer
-	{
-	public:
-		explicit Guard_Pointer(Mutex *m): mu_(m) { mu_->acquire(); }
-		void change_mutex(Mutex* m)
-		{
-			mu_->release();
-			mu_ = m;
-			mu_->acquire();
-		}
-		~Guard_Pointer() 				{ mu_->release(); }
+	class Guard_Pointer {
+		public:
+			explicit Guard_Pointer(Mutex *m): mu_(m) { mu_->acquire(); }
+			void change_mutex(Mutex* m)
+			{
+				mu_->release();
+				mu_ = m;
+				mu_->acquire();
+			}
+			~Guard_Pointer() 				{ mu_->release(); }
 
-	private:
-		Mutex* mu_;
+		private:
+			Mutex* mu_;
 
-		Guard_Pointer(const Guard_Pointer&);
-		const Guard_Pointer& operator = (const Guard_Pointer&);
-	};
+			Guard_Pointer(const Guard_Pointer&);
+			const Guard_Pointer& operator = (const Guard_Pointer&);
+		};
 
-	class Event
-	{
-	public:
+	class Event {
+		public:
 		Event(): set_(false), mu_(), cv_(mu_) {}
 
 		int wait()
@@ -1482,7 +1460,7 @@ namespace ads
 			return 0;
 		}
 
-	private:
+		private:
 		bool set_;
 		Mutex mu_;
 		Condition_Var cv_;
@@ -1491,8 +1469,7 @@ namespace ads
 		const Event& operator = (const Event&);
 	};
 
-	template <typename T> class TSS
-	{
+	template <typename T> class TSS {
 	public:
 		TSS() { ::pthread_key_create(&key_, cleanup); }
 		~TSS() { }
@@ -1516,9 +1493,8 @@ namespace ads
 		pthread_key_t key_;
 	};
 
-// non-protected simple version
-	template <class T> class Singleton
-	{
+	// non-protected simple version
+	template <class T> class Singleton {
 	public:
 		static inline T* instance();
 
@@ -1531,15 +1507,13 @@ namespace ads
 	};
 
 	template <class T> std::auto_ptr<T> Singleton<T>::_instance;
-	template <class T> inline T* Singleton<T>::instance()
-	{
+	template <class T> inline T* Singleton<T>::instance() {
 		if(0 == _instance.get())
 			_instance.reset(new T());
 		return _instance.get();
 	}
 
-	struct Error_Info
-	{
+	struct Error_Info {
 		typedef enum
 		{
 			SEVERITY_INFO = 1,
@@ -1562,9 +1536,9 @@ namespace ads
 	};
 
 	template <typename T>
-	class Message_Queue
-	{
-	public:
+
+	class Message_Queue {
+		public:
 		Message_Queue(int capacity=-1)
 			: mutex_(), not_full_cond_(mutex_), not_empty_cond_(mutex_), empty_cond_(mutex_),  count_(0), capacity_(size_t(capacity)), active_(true) {}
 
@@ -1656,7 +1630,7 @@ namespace ads
 
 		void capacity(size_t cap) { this->capacity_ = cap; }
 
-	private:
+		private:
 		Mutex mutex_;
 		Condition_Var not_full_cond_, not_empty_cond_, empty_cond_;
 
@@ -1666,8 +1640,7 @@ namespace ads
 		bool active_;
 	};
 
-	struct Error_List: public std::list<Error_Info *>
-	{
+	struct Error_List: public std::list<Error_Info *> {
 		~Error_List() 	{ std::for_each(begin(), end(), std::mem_fun(&Error_Info::destroy)); }
 		void reset()	{ std::for_each(begin(), end(), std::mem_fun(&Error_Info::destroy)); this->clear(); }
 	};
@@ -1680,14 +1653,14 @@ namespace ads
 	 * @return        returns current thread id
 	 */
 	inline uint64_t thr_id(pthread_t thread = thr_self()) {
-#ifdef __APPLE__
+		#ifdef __APPLE__
 		uint64_t tid;
 		pthread_threadid_np(thread, &tid);
 		return tid;
-#else
-//		return thread;
+		#else
+		//return thread;
 		return syscall(SYS_gettid);
-#endif
+		#endif
 	}
 
 	inline const char * basename(const char *pathname, char delim = '/')
