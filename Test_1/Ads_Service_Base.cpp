@@ -76,7 +76,7 @@ Ads_Service_Base::open() {
 
 int
 Ads_Service_Base::stop() {
-	signal_supervisor_exit = 1;
+	this->signal_supervisor_exit = 1;
 	this->exitting_ = true;
 	{
 		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
@@ -136,7 +136,7 @@ int
 Ads_Service_Base::wait() {
 	for (size_t i = 0; i < thread_ids_.size(); ++i)
 		::pthread_join(this->thread_ids_[i], 0);
-	::pthread_join(this->supervisor_id, NULL);
+	::pthread_join(this->supervisor_id, 0);
 	return 0;
 }
 
@@ -187,14 +187,12 @@ Ads_Service_Base::dispatch_message(Ads_Message_Base *msg) {
 				pthread_exit(NULL);
 			}
 		}
-		else std::cout << "curtail action forbidden: thread_pool size is: " << n_threads_ <<std::endl;
+		else std::cout << "curtail action forbidden: thread_pool size is: " << (int)n_threads_ <<std::endl;
 			//ADS_LOG_RETURN((LP_ERROR, "curtail action forbidden: thread_pool size is %d\n"), TP_SIZE_THRESHOLD);
 		return 0;
 	}
 	case Ads_Message_Base::MESSAGE_SERVICE: {
-		std::cout << "do sleep" << pthread_self() << std::endl;
 		sleep(1);
-		std::cout << "down sleep" << pthread_self() << std::endl;
 		return 0;
 	}
 	default:
@@ -224,6 +222,7 @@ Ads_Service_Base::release_message(Ads_Message_Base *msg) {
 		case Ads_Message_Base::MESSAGE_EXIT:
 		case Ads_Message_Base::MESSAGE_IDLE:
 		case Ads_Message_Base::MESSAGE_CURTAIL_TP_SIZE:
+		case Ads_Message_Base::MESSAGE_SERVICE:
 			break;
 		default:
 			std::cout << "invalid message" << msg->type() << std::endl;
@@ -256,7 +255,7 @@ Ads_Service_Base::extend_threadpool_size() {
 		if (ret != 0) std::cout << "failed to create thread " << i << std::endl;
 		//ADS_LOG((LP_ERROR, "failed to create thread %d\n", i));
 	}
-	std::cout << "thread_pool size: " <<  thread_ids_.size()<< std::endl;
+	std::cout << "thread_pool size: " <<  (int)thread_ids_.size()<< std::endl;
 	return 0;
 }
 
@@ -301,20 +300,23 @@ Ads_Service_Base::supervisor_func() {
 int main() {
 	Ads_Service_Base testASB;
 	testASB.num_threads(5);
-	for (int i = 0; i < 20; ++ i) {
+	for (int i = 0; i < 10; ++ i) {
 		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
 		testASB.post_message(msg);
 	}
+	std::cout << "MQ: Message count =  " << testASB.message_count() << std::endl;
 	if (testASB.open()) std::cout << "open() error" << std::endl;
+	else std::cout << "open() run " << std::endl;
 		//ADS_LOG((LP_ERROR, "open() error\n"));
 	sleep(5);
 	/* add more message to queue*/
-	for (int i = 0; i < 20; ++ i) {
+	for (int i = 0; i < 5; ++ i) {
 		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
 		testASB.post_message(msg);
 	}
 	sleep(5);
 	if(testASB.stop()) std::cout << "stop() error" << std::endl;
+	else std::cout << "stop() run" << std::endl;
 		//ADS_LOG((LP_ERROR, "stop() error\n"));
 	return 0;
 }
