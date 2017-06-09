@@ -285,7 +285,7 @@ int
 Ads_Service_Base::supervisor_func() {
 	int try_extend = 0;
 	while (!this->signal_supervisor_exit) {
-		sleep(1);
+		sleep(2);
 		try_extend ++;
 		if ((int)this->message_count() == 0)
 			this->curtail_threadpool_size();
@@ -300,7 +300,7 @@ Ads_Service_Base::supervisor_func() {
 int main() {
 	Ads_Service_Base testASB;
 	testASB.num_threads(5);
-	for (int i = 0; i < 10; ++ i) {
+	for (int i = 0; i < 12; ++ i) {
 		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
 		testASB.post_message(msg);
 	}
@@ -310,11 +310,13 @@ int main() {
 		//ADS_LOG((LP_ERROR, "open() error\n"));
 	sleep(5);
 	/* add more message to queue*/
-	for (int i = 0; i < 5; ++ i) {
+	for (int i = 0; i < 4; ++ i) {
 		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
 		testASB.post_message(msg);
 	}
+	std::cout << "MQ: Message count =  " << testASB.message_count() << std::endl;
 	sleep(5);
+	std::cout << "MQ: Message count =  " << testASB.message_count() << std::endl;
 	if(testASB.stop()) std::cout << "stop() error" << std::endl;
 	else std::cout << "stop() run" << std::endl;
 		//ADS_LOG((LP_ERROR, "stop() error\n"));

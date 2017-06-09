@@ -1082,8 +1082,7 @@ namespace json {
 #endif
 
 namespace ads {
-	struct Time_Value
-	{
+	struct Time_Value {
 		Time_Value() { this->tv_.tv_sec = 0; this->tv_.tv_usec = 0; }
 		explicit Time_Value(const timeval& tv) { this->tv_.tv_sec = tv.tv_sec; this->tv_.tv_usec = tv.tv_usec; }
 		explicit Time_Value(time_t sec, suseconds_t usec = 0) { this->tv_.tv_sec = sec; this->tv_.tv_usec = usec; }
