@@ -334,14 +334,7 @@ public:
 
 	// stop the service
 	virtual int stop();
-
-	/* zxliu temporary modification */
-	virtual int extend_threadpool_size();
-	virtual int curtail_threadpool_size();
-	static void *supervisor_func_run(void *arg);
-	virtual int supervisor_func();
-
-	int wait();
+	virtual int wait();
 
 private:
 	///XXX: to prevent mistaken usage
@@ -370,12 +363,40 @@ protected:
 	ads::Message_Queue<Ads_Message_Base> msg_queue_;
 
 	volatile bool exitting_;
-	volatile int signal_supervisor_exit;
 	ads::Time_Value time_last_activity_;
 
 	size_t n_threads_;
 	std::vector<pthread_t> thread_ids_;
-	pthread_t supervisor_id;
+};
+
+class Ads_Service_Base_TP_Adaptive: public Ads_Service_Base {
+public:
+	struct ListNode {
+		pthread_t val;
+		ListNode *next;
+		ListNode(pthread_t x): val(x), next(NULL) {}
+	};
+
+	int open();
+	int wait();
+	int stop();
+
+	int extend_threadpool();
+	int curtail_threadpool();
+
+	int supervisor_func();
+	static void *supervisor_func_run(void *arg);
+
+	int dispatch_message(Ads_Message_Base *msg);
+	int release_message(Ads_Message_Base *msg);
+
+protected:
+	ListNode* thread_ids_start;
+	ListNode* thread_ids_tail;
+	volatile int signal_supervisor_exit;
+
+private:
+	int deleteListNod(pthread_t target);
 };
 
 #endif /* ADS_SERVICE_BASE_H */
