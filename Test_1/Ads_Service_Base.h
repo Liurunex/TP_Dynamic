@@ -369,17 +369,35 @@ protected:
 	std::vector<pthread_t> thread_ids_;
 };
 
+/* zxliu modification */
+#define MQ_THRESHOLD 10
+#define TIME_THRESHOLD 3
+#define TP_MIN_THRESHOLD 5
+#define TP_EXTEND_SCALE 2
+#define TP_IDLE_THRESHOLD 2
+
 class Ads_Service_Base_TP_Adaptive: public Ads_Service_Base {
 public:
 	struct ListNode {
 		pthread_t val;
 		ListNode *next;
-		ListNode(pthread_t x): val(x), next(NULL) {}
+		int status;
+		ListNode(pthread_t x) : val(x), next(NULL), status(0) {}
+	};
+
+	Ads_Service_Base_TP_Adaptive() : Ads_Service_Base() {
+		thread_ids_start = NULL;
+		thread_ids_tail = NULL;
+		signal_supervisor_start = 0;
+		signal_supervisor_exit = 0;
+		signal_worker_start = 0;
+		exit_threads_count = 0;
 	};
 
 	int open();
 	int wait();
 	int stop();
+	int svc();
 
 	int extend_threadpool();
 	int curtail_threadpool();
@@ -391,12 +409,19 @@ public:
 	int release_message(Ads_Message_Base *msg);
 
 protected:
+
+	int exit_threads_count;
 	ListNode* thread_ids_start;
 	ListNode* thread_ids_tail;
 	volatile int signal_supervisor_exit;
+	volatile int signal_supervisor_start;
+	volatile int signal_worker_start;
+	volatile int signal_worker_exit;
 
-private:
-	int deleteListNod(pthread_t target);
+	int deleteListNode(pthread_t target);
+	int deleteList();
+	int thread_status_set(pthread_t pid, int set_sta);
+	size_t count_idle_threads();
 };
 
 #endif /* ADS_SERVICE_BASE_H */

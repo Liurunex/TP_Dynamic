@@ -23,12 +23,6 @@
 #include <sys/time.h>
 
 #include "Ads_Service_Base.h"
-
-#define MQ_THRESHOLD 10
-#define TIME_THRESHOLD 6
-#define TP_MIN_THRESHOLD 5
-#define TP_EXTEND_SCALE 2
-
 Ads_Message_Base *
 Ads_Message_Base::create(Ads_Message_Base::TYPE type, void *data) {
 	Ads_Message_Base *msg = new Ads_Message_Base(type, data);
@@ -208,12 +202,52 @@ Ads_Service_Base::release_message(Ads_Message_Base *msg) {
 	return 0;
 }
 
-/* zxliu modify*/
+
+
+/* zxliu modification */
+size_t
+Ads_Service_Base_TP_Adaptive::count_idle_threads() {
+	ListNode* dummy = thread_ids_start->next;
+	size_t all_idle = 0;
+	while (dummy) {
+		if (!dummy->status) all_idle ++;
+		dummy = dummy->next;
+	}
+	//std::cout << "Idle counts: " << all_idle << std::endl;
+	return all_idle;
+}
 
 int
-Ads_Service_Base_TP_Adaptive::deleteListNod(pthread_t target) {
-	if (!thread_ids_start) return 0;
-	ListNode* dummy = thread_ids_start;
+Ads_Service_Base_TP_Adaptive::deleteList() {
+	ListNode* toDelete = this->thread_ids_start;
+	while (toDelete) {
+		ListNode* tem = toDelete;
+		toDelete = toDelete->next;
+		delete tem;
+		tem = NULL;
+	}
+	this->thread_ids_start = NULL;
+	this->thread_ids_tail = NULL;
+	return 0;
+}
+
+int
+Ads_Service_Base_TP_Adaptive::thread_status_set(pthread_t pid, int set_sta) {
+	ListNode* dummy = this->thread_ids_start->next;
+	while (dummy) {
+		if (dummy->val == pid) {
+			dummy->status = set_sta;
+			return 0;
+		}
+		dummy = dummy->next;
+	}
+	return 1;
+}
+
+int
+Ads_Service_Base_TP_Adaptive::deleteListNode(pthread_t target) {
+	this->signal_worker_start
+	ListNode* dummy = thread_ids_start->next;
 	int found = 0;
 	while (dummy) {
 		if (dummy->val == target) {
@@ -225,6 +259,7 @@ Ads_Service_Base_TP_Adaptive::deleteListNod(pthread_t target) {
 	if (found) {
 		ListNode* tem = dummy->next;
 		dummy->val = tem->val;
+		dummy->status = tem->status;
 		dummy->next = tem->next;
 		delete tem;
 		tem = NULL;
@@ -238,15 +273,15 @@ Ads_Service_Base_TP_Adaptive::open() {
 	/* supervisor thread initial */
 	pthread_t supervisor_id;
 	ListNode *supervisor_thread = new ListNode(supervisor_id);
+	supervisor_thread->status = 1;
 	this->thread_ids_start = supervisor_thread;
 
 	pthread_attr_t _sattr;
 	pthread_attr_init(&_sattr);
 	pthread_attr_t *sattr;
 	sattr = &_sattr;
-	if (::pthread_create(&supervisor_id, sattr, &Ads_Service_Base_TP_Adaptive::supervisor_func_run, this))
+	if (::pthread_create(&this->thread_ids_start->val, sattr, &Ads_Service_Base_TP_Adaptive::supervisor_func_run, this))
 		std::cout << "failed to create supervisor thread" << std::endl;
-	else signal_supervisor_exit = 0;
 
 	#if defined(ADS_ENABLE_SEARCH) || defined(ADS_ENABLE_MACOSX)
 	pthread_attr_t _attr;
@@ -254,7 +289,7 @@ Ads_Service_Base_TP_Adaptive::open() {
 	pthread_attr_setstacksize(&_attr, 0x4000000); //64M
 	#endif
 
-	this->thread_ids_tail = this->thread_ids_start;
+	thread_ids_tail = thread_ids_start;
 	for (size_t i = 0; i < n_threads_; ++ i) {
 		/* new a ListNode added to LinkedList*/
 		pthread_t pth_id;
@@ -266,19 +301,24 @@ Ads_Service_Base_TP_Adaptive::open() {
 		#if defined(ADS_ENABLE_SEARCH) || defined(ADS_ENABLE_MACOSX)
 		attr = &_attr;
 		#endif
-		int ret = ::pthread_create(&pth_id, attr, &this->svc_run, this);
+		int ret = ::pthread_create(&newThread->val, attr, &Ads_Service_Base_TP_Adaptive::svc_run, this);
 		if (ret != 0) std::cout << "failed to create thread " << i << std::endl;
 	}
-
-	std::cout << "thread_pool size: " << n_threads_ << std::endl;
+	/* make supervisor and worker start to work */
+	this->signal_worker_start = 1;
+	this->signal_supervisor_start = 1;
+	std::cout << "open() thread_pool size: " << n_threads_ << std::endl;
 
 	return 0;
 }
 
 int
 Ads_Service_Base_TP_Adaptive::extend_threadpool() {
+	this->signal_worker_start = 0;
+
 	size_t start_index = n_threads_;
-	n_threads_ += n_threads_ / TP_EXTEND_SCALE;
+	n_threads_ += (n_threads_ / TP_EXTEND_SCALE);
+
 	pthread_attr_t _attr;
 	pthread_attr_init(&_attr);
 	pthread_attr_setstacksize(&_attr, 0x4000000); //64M
@@ -291,11 +331,12 @@ Ads_Service_Base_TP_Adaptive::extend_threadpool() {
 
 		pthread_attr_t *attr = 0;
 		attr = &_attr;
-		int ret = ::pthread_create(&pth_id, attr, &this->svc_run, this);
+		int ret = ::pthread_create(&newThread->val, attr, &Ads_Service_Base_TP_Adaptive::svc_run, this);
 		if (ret != 0) std::cout << "failed to create thread " << i << std::endl;
 		//ADS_LOG((LP_ERROR, "failed to create thread %d\n", i));
 	}
-	std::cout << "thread_pool size: " <<  (int)n_threads_<< std::endl;
+	this->signal_worker_start = 1;
+	std::cout << "extend thread_pool size: " <<  (int)n_threads_<< std::endl;
 	return 0;
 }
 
@@ -324,14 +365,17 @@ Ads_Service_Base_TP_Adaptive::supervisor_func_run(void *arg) {
 int
 Ads_Service_Base_TP_Adaptive::supervisor_func() {
 	int try_extend = 0;
+	while (!this->signal_supervisor_start)
+		;
 	while (!this->signal_supervisor_exit) {
-		sleep(2);
+		std::cout << "supervisor do run" << std::endl;
+		sleep(1);
 		try_extend ++;
-		if ((int)this->message_count() == 0) {
+		if ((int)this->message_count() == 0 && this->count_idle_threads() >= TP_IDLE_THRESHOLD) {
 			std::cout << "do curtail" << std::endl;
 			this->curtail_threadpool();
 		}
-		else if ((int)this->message_count() >= MQ_THRESHOLD && try_extend >= TIME_THRESHOLD) {
+		else if (try_extend >= TIME_THRESHOLD && (int)this->message_count() >= MQ_THRESHOLD) {
 			std::cout << "do extend" << std::endl;
 			this->extend_threadpool();
 			try_extend = 0;
@@ -341,46 +385,79 @@ Ads_Service_Base_TP_Adaptive::supervisor_func() {
 }
 
 int
+Ads_Service_Base_TP_Adaptive::svc() {
+	//	ACE_DEBUG((LM_INFO, "[base: %t] Base Service started.\n"));
+	Ads_Message_Base *msg = 0;
+	pthread_t ppid = pthread_self();
+	while (!this->signal_worker_start)
+		;
+	while (msg_queue_.dequeue(msg) >= 0) {
+		if(this->exitting_) {
+			msg->destroy();
+			break;
+		}
+
+		pthread_t pid = pthread_self();
+		//std::cout << "current pid: " << pid << std::endl;
+		if(this->thread_status_set(pid, 1))
+			std::cout << "set thread status failed 1 " << std::endl;
+
+		if (this->dispatch_message(msg) < 0)
+			std::cout << "failed to dispatch msg" << std::endl;
+			//ADS_DEBUG((LP_DEBUG, "failed to dispatch msg.\n"));
+
+		msg->destroy();
+
+		if(this->thread_status_set(pid, 0))
+			std::cout << "set thread status failed 0" << std::endl;
+
+		this->time_last_activity_ = ads::gettimeofday();
+
+	}
+	//	ACE_DEBUG((LM_INFO, "[base: %t] Base Service stopped.\n"));
+	return 0;
+}
+
+int
 Ads_Service_Base_TP_Adaptive::wait() {
-	ListNode* dummy = thread_ids_start;
+	std::cout << "wait()" << std::endl;
+	ListNode* dummy = this->thread_ids_start->next;
 	while (dummy) {
 		::pthread_join(dummy->val, 0);
+		std::cout << "join: " << dummy->val << std::endl;
 		dummy = dummy->next;
+		this->exit_threads_count ++;
 	}
 	return 0;
 }
 
 int
 Ads_Service_Base_TP_Adaptive::stop() {
+	std::cout << "stop()" << std::endl;
 	this->signal_supervisor_exit = 1;
 	this->exitting_ = true;
-	{
-		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
-		if(this->post_message(msg) < 0) {
-			std::cout << "cannot post exit message 1" << std::endl;
-			msg->destroy();
 
-			/// due to possible signal_dequeue_waiters failure, Message_Queue might continuously wait_not_empty_cond
-			/// so here we enqueue MESSAGE_EXIT message twice.
-			Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
-			if (this->post_message(msg) < 0) {
-				msg->destroy();
-				std::cout << "cannot post exit message 2" << std::endl;
-			}
+	::pthread_join(this->thread_ids_start->val, 0);
+
+	for (int i = 0; i < n_threads_; ++ i) {
+		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
+		if (this->post_message(msg) < 0) {
+			msg->destroy();
+			std::cout << "cannot post exit message 2" << std::endl;
+			i --;
 		}
 	}
+
+
 	this->wait();
 
 	Ads_Message_Base *msg = 0;
 	while (this->msg_queue_.dequeue(msg, true, false) >= 0)
 		this->release_message(msg);
 
-	while (thread_ids_start) {
-		ListNode* tem = thread_ids_start;
-		thread_ids_start = thread_ids_start->next;
-		delete tem;
-		tem = NULL;
-	}
+	if (this->deleteList())
+		std::cout << "failed to delete LinkedList " << std::endl;
+
 	return 0;
 }
 
@@ -413,6 +490,7 @@ Ads_Service_Base_TP_Adaptive::dispatch_message(Ads_Message_Base *msg) {
 	// exit log manager
 	case Ads_Message_Base::MESSAGE_EXIT: {
 			this->exitting_ = true;
+			this->signal_supervisor_exit = 1;
 			return 0;
 	}
 	case Ads_Message_Base::MESSAGE_IDLE:
@@ -420,10 +498,10 @@ Ads_Service_Base_TP_Adaptive::dispatch_message(Ads_Message_Base *msg) {
 	case Ads_Message_Base::MESSAGE_CURTAIL_TP_SIZE: {
 		if ((int)n_threads_ > TP_MIN_THRESHOLD) {
 			pthread_t cur_id = pthread_self();
-			int ifdelete = this->deleteListNod(cur_id);
-			if (ifdelete) {
-				n_threads_ --;
-				std::cout << "thread_pool size: " << (int)n_threads_ << std::endl;
+			if (this->deleteListNode(cur_id)) {
+				//std::cout << "curtail in " << std::endl;
+				this->n_threads_ --;
+				std::cout << "curtail() thread_pool size: " << (int)n_threads_ << std::endl;
 				pthread_exit(NULL);
 			}
 		}
@@ -446,23 +524,26 @@ Ads_Service_Base_TP_Adaptive::dispatch_message(Ads_Message_Base *msg) {
 int main() {
 	Ads_Service_Base_TP_Adaptive testASB;
 	testASB.num_threads(10);
-	for (int i = 0; i < 2; ++ i) {
+	for (int i = 0; i < 1; ++ i) {
 		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
 		testASB.post_message(msg);
 	}
 	std::cout << "MQ: Message count =  " << testASB.message_count() << std::endl;
+
 	if (testASB.open()) std::cout << "open() error" << std::endl;
 	else std::cout << "open() run " << std::endl;
 		//ADS_LOG((LP_ERROR, "open() error\n"));
+
 	sleep(10);
-	/*add more message to queue*/
+
 	for (int i = 0; i < 40; ++ i) {
 		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
 		testASB.post_message(msg);
 	}
 	std::cout << "MQ: Message count =  " << testASB.message_count() << std::endl;
 
-	sleep(5);
+	sleep(10);
+
 	if(testASB.stop()) std::cout << "stop() error" << std::endl;
 	else std::cout << "stop() run" << std::endl;
 		//ADS_LOG((LP_ERROR, "stop() error\n"));
