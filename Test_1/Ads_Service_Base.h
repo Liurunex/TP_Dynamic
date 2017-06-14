@@ -373,9 +373,10 @@ protected:
 #include <unordered_map>
 
 #define MQ_THRESHOLD 10
-#define TIME_THRESHOLD 3
+#define TIME_THRESHOLD 30
 #define TP_MIN_THRESHOLD 3
 #define TP_EXTEND_SCALE 2
+#define TP_CURTAIL_SIZE 1
 #define TP_IDLE_THRESHOLD 2
 
 class Ads_Service_Base_TP_Adaptive: public Ads_Service_Base {
@@ -392,8 +393,8 @@ public:
 	int stop();
 	int svc();
 
-	int extend_threadpool();
-	int curtail_threadpool();
+	int extend_threadpool(int extend_scale);
+	int curtail_threadpool(int curtail_size);
 
 	int supervisor_func();
 	static void *supervisor_func_run(void *arg);

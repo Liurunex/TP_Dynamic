@@ -226,7 +226,7 @@ Ads_Service_Base_TP_Adaptive::count_idle_threads() {
 int
 Ads_Service_Base_TP_Adaptive::thread_status_set(pthread_t pid, int set_sta) {
 	mutex_map.acquire();
-	//std::cout << "thread_status_set() in " << pid << " status: " << set_sta << std::endl;
+	std::cout << "thread_status_set() on " << pthread_self() << " target: " << pid << std::endl;
 	std::unordered_map<pthread_t, int>::iterator got = thread_ids_map.find(pid);
 	if (got != thread_ids_map.end()) got->second = set_sta;
 	else std::cout << "thread_status_set() not found target: " << pid << std::endl;
@@ -242,16 +242,28 @@ Ads_Service_Base_TP_Adaptive::deleteNode(pthread_t target) {
 		thread_ids_map.erase(got);
 	int res = thread_ids_map.find(target) == thread_ids_map.end() ? 1:0;
 	std::cout << "erase the pid: " << target << " , check success: " << res << std::endl;
+
+	this->n_threads_ --;
+	std::cout << "\ncurtail() thread_pool size: " << (int)n_threads_ << std::endl;
+	std::cout << "\nafter curtail, allthreads:" <<std::endl;
+	std::unordered_map<pthread_t, int>::iterator it = thread_ids_map.begin();
+	while(it != thread_ids_map.end()) {
+		std::cout << it->first << "_ ";
+		it ++;
+	}
+	std::cout << "curtail_end()\n" <<std::endl;
+
 	mutex_map.release();
 	return 0;
 }
 
 int
-Ads_Service_Base_TP_Adaptive::extend_threadpool() {
+Ads_Service_Base_TP_Adaptive::extend_threadpool(int extend_scale) {
 	mutex_map.acquire();
+	extend_scale = TP_EXTEND_SCALE;
 	this->signal_worker_start = 0;
 	size_t start_index = n_threads_;
-	n_threads_ += (n_threads_ / TP_EXTEND_SCALE);
+	n_threads_ += (n_threads_ / extend_scale);
 
 	pthread_attr_t _attr;
 	pthread_attr_init(&_attr);
@@ -289,7 +301,8 @@ Ads_Service_Base_TP_Adaptive::extend_threadpool() {
 /* END_thread_safe */
 
 int
-Ads_Service_Base_TP_Adaptive::curtail_threadpool() {
+Ads_Service_Base_TP_Adaptive::curtail_threadpool(int curtail_size) {
+	int curtail_counter = 0;
 	while (1) {
 		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_CURTAIL_TP_SIZE);
 		if(this->post_message(msg) < 0) {
@@ -297,7 +310,10 @@ Ads_Service_Base_TP_Adaptive::curtail_threadpool() {
 			//ADS_LOG((LP_ERROR, "cannot post curtail message\n"));
 			msg->destroy();
 		}
-		else return 0;
+		else {
+			curtail_counter ++;
+			if (curtail_counter == curtail_size) return 0;
+		}
 	}
 	return 0;
 }
@@ -312,6 +328,7 @@ Ads_Service_Base_TP_Adaptive::open() {
 	if (::pthread_create(&supervisor_id, sattr, &Ads_Service_Base_TP_Adaptive::supervisor_func_run, this))
 		std::cout << "failed to create supervisor thread" << std::endl;
 
+	/* worker thread initial */
 	#if defined(ADS_ENABLE_SEARCH) || defined(ADS_ENABLE_MACOSX)
 	pthread_attr_t _attr;
 	pthread_attr_init(&_attr);
@@ -319,17 +336,16 @@ Ads_Service_Base_TP_Adaptive::open() {
 	#endif
 
 	for (size_t i = 0; i < n_threads_; ++ i) {
-		/* new a ListNode added to LinkedList*/
 		pthread_t pth_id;
-		thread_ids_map[pth_id] = 0;
-
 		pthread_attr_t *attr = 0;
 		#if defined(ADS_ENABLE_SEARCH) || defined(ADS_ENABLE_MACOSX)
 		attr = &_attr;
 		#endif
 		int ret = ::pthread_create(&pth_id, attr, &Ads_Service_Base_TP_Adaptive::svc_run, this);
 		if (ret != 0) std::cout << "failed to create thread " << i << std::endl;
+		thread_ids_map[pth_id] = 0;
 	}
+
 	std::cout << "open() thread_pool size: " << (int)n_threads_ << std::endl;
 	std::cout << "\nallthreads:" <<std::endl;
 	std::unordered_map<pthread_t, int>::iterator it = thread_ids_map.begin();
@@ -365,11 +381,11 @@ Ads_Service_Base_TP_Adaptive::supervisor_func() {
 		try_extend ++;
 		if ((int)this->message_count() == 0 && this->count_idle_threads() >= TP_IDLE_THRESHOLD) {
 			std::cout << "do curtail" << std::endl;
-			this->curtail_threadpool();
+			this->curtail_threadpool(TP_CURTAIL_SIZE);
 		}
 		else if (try_extend >= TIME_THRESHOLD && (int)this->message_count() >= MQ_THRESHOLD) {
 			std::cout << "do extend" << std::endl;
-			this->extend_threadpool();
+			this->extend_threadpool(TP_EXTEND_SCALE);
 			try_extend = 0;
 		}
 	}
@@ -389,9 +405,8 @@ Ads_Service_Base_TP_Adaptive::svc() {
 			break;
 		}
 
-		pthread_t pid = pthread_self();
 		//std::cout << "current pid: " << pid << std::endl;
-		if (msg->type() == Ads_Message_Base::MESSAGE_SERVICE && this->thread_status_set(pid, 1))
+		if (msg->type() == Ads_Message_Base::MESSAGE_SERVICE && this->thread_status_set(pthread_self(), 1))
 			std::cout << "set thread status failed 1 " << std::endl;
 
 		if (this->dispatch_message(msg) < 0)
@@ -400,7 +415,7 @@ Ads_Service_Base_TP_Adaptive::svc() {
 
 		msg->destroy();
 
-		if (msg->type() == Ads_Message_Base::MESSAGE_SERVICE && this->thread_status_set(pid, 0))
+		if (msg->type() == Ads_Message_Base::MESSAGE_SERVICE && this->thread_status_set(pthread_self(), 0))
 			std::cout << "set thread status failed 0" << std::endl;
 
 		this->time_last_activity_ = ads::gettimeofday();
@@ -490,11 +505,7 @@ Ads_Service_Base_TP_Adaptive::dispatch_message(Ads_Message_Base *msg) {
 			return this->on_idle();
 	case Ads_Message_Base::MESSAGE_CURTAIL_TP_SIZE: {
 		if ((int)n_threads_ > TP_MIN_THRESHOLD) {
-			pthread_t cur_id = pthread_self();
-			if (!this->deleteNode(cur_id)) {
-				//std::cout << "curtail in " << std::endl;
-				this->n_threads_ --;
-				std::cout << "curtail() thread_pool size: " << (int)n_threads_ << std::endl;
+			if (!this->deleteNode(pthread_self())) {
 				pthread_exit(0);
 			}
 		}
@@ -517,7 +528,7 @@ Ads_Service_Base_TP_Adaptive::dispatch_message(Ads_Message_Base *msg) {
 int main() {
 	Ads_Service_Base_TP_Adaptive testASB;
 	testASB.num_threads(5);
-	for (int i = 0; i < 1; ++ i) {
+	for (int i = 0; i < 50; ++ i) {
 		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
 		testASB.post_message(msg);
 	}
