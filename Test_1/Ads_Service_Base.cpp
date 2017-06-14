@@ -226,7 +226,7 @@ int
 Ads_Service_Base_TP_Adaptive::thread_status_set(pthread_t pid, int set_sta) {
 	mutex_map.acquire();
 
-	std::cout << "thread_status_set() on " << pthread_self() << " target: " << pid << std::endl;
+	//std::cout << "thread_status_set() on " << pthread_self() << " target: " << pid << std::endl;
 	std::unordered_map<pthread_t, int>::iterator got = thread_ids_map.find(pid);
 	if (got != thread_ids_map.end()) got->second = set_sta;
 	else std::cout << "thread_status_set() not found target: " << pid << std::endl;
@@ -401,10 +401,13 @@ Ads_Service_Base_TP_Adaptive::svc() {
 		if (msg->type() == Ads_Message_Base::MESSAGE_SERVICE && this->thread_status_set(pthread_self(), 1))
 			std::cout << "set thread status failed 1 " << std::endl;
 
-		if (this->dispatch_message(msg) < 0)
+		int dispatch_return = this->dispatch_message(msg);
+		if (dispatch_return < 0)
 			std::cout << "failed to dispatch msg" << std::endl;
 
 		msg->destroy();
+		/* terminate current thread */
+		if (dispatch_return == SIGNAL_EXIT_THREAD) return 0;
 
 		if (msg->type() == Ads_Message_Base::MESSAGE_SERVICE && this->thread_status_set(pthread_self(), 0))
 			std::cout << "set thread status failed 0" << std::endl;
@@ -496,9 +499,11 @@ Ads_Service_Base_TP_Adaptive::dispatch_message(Ads_Message_Base *msg) {
 	case Ads_Message_Base::MESSAGE_CURTAIL_TP_SIZE: {
 		if ((int)n_threads_ > TP_MIN_THRESHOLD) {
 			if (!this->deleteNode(pthread_self()))
-				pthread_exit(0);
+				return SIGNAL_EXIT_THREAD;
+				//pthread_exit(0);
 		}
 		else std::cout << "curtail action forbidden: thread_pool size is: " << (int)n_threads_ <<std::endl;
+		return 0;
 	}
 	case Ads_Message_Base::MESSAGE_SERVICE: {
 		sleep(5);
@@ -515,7 +520,7 @@ Ads_Service_Base_TP_Adaptive::dispatch_message(Ads_Message_Base *msg) {
 int main() {
 	Ads_Service_Base_TP_Adaptive testASB;
 	testASB.num_threads(5);
-	for (int i = 0; i < 50; ++ i) {
+	for (int i = 0; i < 1; ++ i) {
 		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
 		testASB.post_message(msg);
 	}
@@ -525,13 +530,13 @@ int main() {
 
 	sleep(5);
 
-	for (int i = 0; i < 30; ++ i) {
+	for (int i = 0; i < 10; ++ i) {
 		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
 		testASB.post_message(msg);
 	}
 	std::cout << "MQ: Message count =  " << testASB.message_count() << std::endl;
 
-	sleep(5);
+	sleep(10);
 
 	if(!testASB.stop()) std::cout << "stop() done" << std::endl;
 	return 0;

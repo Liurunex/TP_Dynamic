@@ -373,11 +373,12 @@ protected:
 #include <unordered_map>
 
 #define MQ_THRESHOLD 10
-#define TIME_THRESHOLD 30
+#define TIME_THRESHOLD 3
 #define TP_MIN_THRESHOLD 3
 #define TP_EXTEND_SCALE 2
 #define TP_CURTAIL_SIZE 1
 #define TP_IDLE_THRESHOLD 2
+#define SIGNAL_EXIT_THREAD 9
 
 class Ads_Service_Base_TP_Adaptive: public Ads_Service_Base {
 public:
