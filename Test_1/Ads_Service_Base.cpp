@@ -405,13 +405,17 @@ Ads_Service_Base_TP_Adaptive::svc() {
 		if (dispatch_return < 0)
 			std::cout << "failed to dispatch msg" << std::endl;
 
-		msg->destroy();
+
 		/* terminate current thread */
-		if (dispatch_return == SIGNAL_EXIT_THREAD) return 0;
+		if (dispatch_return == SIGNAL_EXIT_THREAD) {
+			msg->destroy();
+			return 0;
+		}
 
 		if (msg->type() == Ads_Message_Base::MESSAGE_SERVICE && this->thread_status_set(pthread_self(), 0))
 			std::cout << "set thread status failed 0" << std::endl;
 
+		msg->destroy();
 		this->time_last_activity_ = ads::gettimeofday();
 
 	}
