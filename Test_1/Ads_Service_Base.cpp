@@ -210,14 +210,13 @@ Ads_Service_Base::release_message(Ads_Message_Base *msg) {
 size_t
 Ads_Service_Base_TP_Adaptive::count_idle_threads() {
 	mutex_map.acquire();
-	//std::cout << "count_idle_threads() in" << std::endl;
+
 	size_t all_idle = 0;
 	std::unordered_map<pthread_t, int>::iterator it = thread_ids_map.begin();
 	while(it != thread_ids_map.end()) {
 		if (!it->second) all_idle ++;
 		it ++;
 	}
-	//std::cout << "Idle counts: " << all_idle << std::endl;
 
 	mutex_map.release();
 	return all_idle;
@@ -226,10 +225,12 @@ Ads_Service_Base_TP_Adaptive::count_idle_threads() {
 int
 Ads_Service_Base_TP_Adaptive::thread_status_set(pthread_t pid, int set_sta) {
 	mutex_map.acquire();
+
 	std::cout << "thread_status_set() on " << pthread_self() << " target: " << pid << std::endl;
 	std::unordered_map<pthread_t, int>::iterator got = thread_ids_map.find(pid);
 	if (got != thread_ids_map.end()) got->second = set_sta;
 	else std::cout << "thread_status_set() not found target: " << pid << std::endl;
+
 	mutex_map.release();
 	return 0;
 }
@@ -237,6 +238,7 @@ Ads_Service_Base_TP_Adaptive::thread_status_set(pthread_t pid, int set_sta) {
 int
 Ads_Service_Base_TP_Adaptive::deleteNode(pthread_t target) {
 	mutex_map.acquire();
+
 	std::unordered_map<pthread_t, int>::iterator got = thread_ids_map.find(target);
 	if (got != thread_ids_map.end())
 		thread_ids_map.erase(got);
@@ -248,7 +250,7 @@ Ads_Service_Base_TP_Adaptive::deleteNode(pthread_t target) {
 	std::cout << "\nafter curtail, allthreads:" <<std::endl;
 	std::unordered_map<pthread_t, int>::iterator it = thread_ids_map.begin();
 	while(it != thread_ids_map.end()) {
-		std::cout << it->first << "_ ";
+		std::cout << it->first << " ";
 		it ++;
 	}
 	std::cout << "curtail_end()\n" <<std::endl;
@@ -260,6 +262,7 @@ Ads_Service_Base_TP_Adaptive::deleteNode(pthread_t target) {
 int
 Ads_Service_Base_TP_Adaptive::extend_threadpool(int extend_scale) {
 	mutex_map.acquire();
+
 	extend_scale = TP_EXTEND_SCALE;
 	this->signal_worker_start = 0;
 	size_t start_index = n_threads_;
@@ -271,29 +274,23 @@ Ads_Service_Base_TP_Adaptive::extend_threadpool(int extend_scale) {
 
 	for (size_t i = start_index; i < n_threads_; ++ i) {
 		pthread_t pth_id;
-		thread_ids_map[pth_id] = 0;
-		/*
-		if (thread_ids_map.find(pth_id) != thread_ids_map.end())
-			std::cout << "extend thread " << pth_id << " found 1" << std::endl;
-		else std::cout << "extend thread " << pth_id << " found 0" << std::endl;
-		*/
 		pthread_attr_t *attr = 0;
 		attr = &_attr;
 		int ret = ::pthread_create(&pth_id, attr, &Ads_Service_Base_TP_Adaptive::svc_run, this);
 		if (ret != 0) std::cout << "failed to create thread " << i << std::endl;
-		//ADS_LOG((LP_ERROR, "failed to create thread %d\n", i));
+		thread_ids_map[pth_id] = 0;
 	}
 
 	std::cout << "extend thread_pool size: " <<  (int)n_threads_<< std::endl;
 	std::cout << "\nafter extend, allthreads:" <<std::endl;
 	std::unordered_map<pthread_t, int>::iterator it = thread_ids_map.begin();
 	while(it != thread_ids_map.end()) {
-		std::cout << it->first << "_ ";
+		std::cout << it->first << " ";
 		it ++;
 	}
 	std::cout << "extend_end()\n" <<std::endl;
-	//std::cout << "Idle counts: " << all_idle << std::en
 	this->signal_worker_start = 1;
+
 	mutex_map.release();
 	return 0;
 }
@@ -307,7 +304,6 @@ Ads_Service_Base_TP_Adaptive::curtail_threadpool(int curtail_size) {
 		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_CURTAIL_TP_SIZE);
 		if(this->post_message(msg) < 0) {
 			std::cout << "cannot post curtail message" << std::endl;
-			//ADS_LOG((LP_ERROR, "cannot post curtail message\n"));
 			msg->destroy();
 		}
 		else {
@@ -350,10 +346,11 @@ Ads_Service_Base_TP_Adaptive::open() {
 	std::cout << "\nallthreads:" <<std::endl;
 	std::unordered_map<pthread_t, int>::iterator it = thread_ids_map.begin();
 	while(it != thread_ids_map.end()) {
-		std::cout << it->first << "_ ";
+		std::cout << it->first << " ";
 		it ++;
 	}
 	std::cout << "open_end()\n" <<std::endl;
+
 	/* make supervisor and worker start to work */
 	this->signal_worker_start = 1;
 	this->signal_supervisor_start = 1;
@@ -374,9 +371,7 @@ Ads_Service_Base_TP_Adaptive::supervisor_func() {
 	int try_extend = 0;
 	while (!this->signal_supervisor_start)
 		;
-	//std::cout << "supervisor_func() started" << std::endl;
 	while (!this->signal_supervisor_exit) {
-		//std::cout << "supervisor do check" << std::endl;
 		sleep(1);
 		try_extend ++;
 		if ((int)this->message_count() == 0 && this->count_idle_threads() >= TP_IDLE_THRESHOLD) {
@@ -394,24 +389,20 @@ Ads_Service_Base_TP_Adaptive::supervisor_func() {
 
 int
 Ads_Service_Base_TP_Adaptive::svc() {
-	//	ACE_DEBUG((LM_INFO, "[base: %t] Base Service started.\n"));
 	Ads_Message_Base *msg = 0;
 	while (!this->signal_worker_start)
 		;
-	//std::cout << "svc started()" << std::endl;
 	while (msg_queue_.dequeue(msg) >= 0) {
 		if(this->exitting_) {
 			msg->destroy();
 			break;
 		}
 
-		//std::cout << "current pid: " << pid << std::endl;
 		if (msg->type() == Ads_Message_Base::MESSAGE_SERVICE && this->thread_status_set(pthread_self(), 1))
 			std::cout << "set thread status failed 1 " << std::endl;
 
 		if (this->dispatch_message(msg) < 0)
 			std::cout << "failed to dispatch msg" << std::endl;
-			//ADS_DEBUG((LP_DEBUG, "failed to dispatch msg.\n"));
 
 		msg->destroy();
 
@@ -421,7 +412,6 @@ Ads_Service_Base_TP_Adaptive::svc() {
 		this->time_last_activity_ = ads::gettimeofday();
 
 	}
-	//	ACE_DEBUG((LM_INFO, "[base: %t] Base Service stopped.\n"));
 	return 0;
 }
 
@@ -450,11 +440,11 @@ Ads_Service_Base_TP_Adaptive::stop() {
 	::pthread_join(supervisor_id, 0);
 	std::cout << "join() supervisor done " << std::endl;
 
-	for (int i = 0; i < n_threads_+10; ++ i) {
+	for (int i = 0; i < n_threads_; ++ i) {
 		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
 		if (this->post_message(msg) < 0) {
 			msg->destroy();
-			std::cout << "cannot post exit message 2" << std::endl;
+			std::cout << "cannot post exit message " << std::endl;
 			i --;
 		}
 	}
@@ -505,13 +495,10 @@ Ads_Service_Base_TP_Adaptive::dispatch_message(Ads_Message_Base *msg) {
 			return this->on_idle();
 	case Ads_Message_Base::MESSAGE_CURTAIL_TP_SIZE: {
 		if ((int)n_threads_ > TP_MIN_THRESHOLD) {
-			if (!this->deleteNode(pthread_self())) {
+			if (!this->deleteNode(pthread_self()))
 				pthread_exit(0);
-			}
 		}
 		else std::cout << "curtail action forbidden: thread_pool size is: " << (int)n_threads_ <<std::endl;
-			//ADS_LOG_RETURN((LP_ERROR, "curtail action forbidden: thread_pool size is %d\n"), TP_MIN_THRESHOLD);
-		return 0;
 	}
 	case Ads_Message_Base::MESSAGE_SERVICE: {
 		sleep(5);
