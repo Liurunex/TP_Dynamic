@@ -402,16 +402,6 @@ Ads_Service_Base_TP_Adaptive::stop() {
 			Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
 		}
 	}
-	/*
-	for (int i = 0; i < (int)thread_ids_map.size(); ++ i) {
-		Ads_Message_Base * msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
-		if(this->post_message(msg) < 0) {
-			msg->destroy();
-			Ads_Message_Base * msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
-			if (this->post_message(msg) < 0)
-				msg->destroy();
-		}
-	}*/
 
 	this->wait();
 
