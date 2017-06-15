@@ -536,28 +536,37 @@ Ads_Service_Base_TP_Adaptive::svc() {
 
 /* main tester */
 int main() {
-	Ads_Service_Base_TP_Adaptive testASB;
-	testASB.num_threads(5);
+	std::vector<Ads_Service_Base_TP_Adaptive *> testGroup;
 
-	for (int i = 0; i < 1; ++ i) {
-		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
-		testASB.post_message(msg);
+	for (int j = 0; j < 5; j ++) {
+		testGroup.push_back(new Ads_Service_Base_TP_Adaptive());
+		testGroup.back()->num_threads(5);
+
+		for (int i = 0; i < 1; ++ i) {
+			Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
+			testGroup.back()->post_message(msg);
+		}
+		std::cout << "MQ:" << j << " Message count =  " << testGroup.back()->message_count() << std::endl;
 	}
-	std::cout << "MQ: Message count =  " << testASB.message_count() << std::endl;
 
-	if(!testASB.open()) std::cout << "open() down" << std::endl;;
+	for (int j = 0; j < 5; j ++)
+		if(!testGroup[j]->open()) std::cout << "TP: " << j << "open() down" << std::endl;;
 
 	sleep(5);
 
-	for (int i = 0; i < 10; ++ i) {
-		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
-		testASB.post_message(msg);
+	for (int j = 0; j < 5; j ++) {
+		for (int i = 0; i < 10; ++ i) {
+			Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
+			testGroup[j]->post_message(msg);
+		}
+		std::cout << "MQ:" << j << " Message count =  " << testGroup[j]->message_count() << std::endl;
 	}
-	std::cout << "MQ: Message count =  " << testASB.message_count() << std::endl;
 
-	sleep(10);
+	sleep(5);
 
-	if(!testASB.stop()) std::cout << "stop() done" << std::endl;
+	for (int j = 0; j < 5; j ++) {
+		if(!testGroup[j]->stop()) std::cout << "TP: " << j << "stop() done" << std::endl;
+	}
 
 	return 0;
 }
