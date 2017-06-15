@@ -561,19 +561,3 @@ int main() {
 
 	return 0;
 }
-/*
-int main() {
-	Ads_Service_Base testOR;
-	testOR.num_threads(5);
-	for (int i = 0; i < 10; ++ i) {
-		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
-		testOR.post_message(msg);
-	}
-	std::cout << "MQ: Message count =  " << testOR.message_count() << std::endl;
-	if(!testOR.open()) std::cout << "open() down" << std::endl;
-	sleep(5);
-	if(!testOR.stop()) std::cout << "stop() done" << std::endl;
-
-	return 0;
-}
-*/
