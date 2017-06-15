@@ -55,7 +55,7 @@ Ads_Service_Base::open() {
 		int ret = ::pthread_create(&this->thread_ids_[i], attr, &Ads_Service_Base::svc_run, this);
 		if (ret != 0)
 		{
-			//ADS_LOG((LP_ERROR, "failed to create thread %d\n", i));
+			////ADS_LOG((LP_ERROR, "failed to create thread %d\n", i));
 		}
 	}
 
@@ -66,17 +66,19 @@ int
 Ads_Service_Base::stop() {
 	this->exitting_ = true;
 	{
-		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
-		if(this->post_message(msg) < 0) {
-			std::cout << "cannot post exit message 1" << std::endl;
-			msg->destroy();
-
-			/// due to possible signal_dequeue_waiters failure, Message_Queue might continuously wait_not_empty_cond
-			/// so here we enqueue MESSAGE_EXIT message twice.
-			Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
-			if (this->post_message(msg) < 0) {
+		for (int i = 0; i < (int)n_threads_; ++ i) {
+			Ads_Message_Base * msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
+			if(this->post_message(msg) < 0) {
+				//ADS_LOG((LP_ERROR, "cannot post exit message 1\n"));
 				msg->destroy();
-				std::cout << "cannot post exit message 2" << std::endl;
+
+				/// due to possible signal_dequeue_waiters failure, Message_Queue might continuously wait_not_empty_cond
+				/// so here we enqueue MESSAGE_EXIT message twice.
+				Ads_Message_Base * msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
+				if (this->post_message(msg) < 0) {
+					msg->destroy();
+					//ADS_LOG((LP_ERROR, "cannot post exit message 2\n"));
+				}
 			}
 		}
 	}
@@ -131,22 +133,22 @@ Ads_Service_Base::post_message(Ads_Message_Base *msg, Ads_Message_Base::PRIORITY
 	if(p == Ads_Message_Base::PRIORITY_HIGH) {
 		if (this->msg_queue_.enqueue(msg) < 0)
 			std::cout << "failed to enqueue msg (HIGH)" << std::endl;
-			//ADS_LOG_RETURN((LP_ERROR, "failed to enqueue msg (HIGH)\n"),-1);
+			////ADS_LOG_RETURN((LP_ERROR, "failed to enqueue msg (HIGH)\n"),-1);
 	}
 	else if(p == Ads_Message_Base::PRIORITY_NORMAL) {
 		if (this->msg_queue_.enqueue(msg) < 0)
 			std::cout << "failed to enqueue msg (NORMAL)" << std::endl;
-			//ADS_LOG_RETURN((LP_ERROR, "failed to enqueue msg (NORMAL)\n"),-1);
+			////ADS_LOG_RETURN((LP_ERROR, "failed to enqueue msg (NORMAL)\n"),-1);
 	}
 	else if(p == Ads_Message_Base::PRIORITY_IDLE) {
 	//if (this->msg_queue_.enqueue(msg, (ACE_Time_Value *)&ACE_Time_Value::zero) < 0)
 		if (this->msg_queue_.enqueue(msg, false, false) < 0)
 			std::cout << "failed to enqueue msg (IDLE)" << std::endl;
-			//ADS_LOG_RETURN((LP_ERROR, "failed to enqueue (IDLE)\n"),-1);
+			////ADS_LOG_RETURN((LP_ERROR, "failed to enqueue (IDLE)\n"),-1);
 	}
 	else
 		std::cout << "invalid priority" << std::endl;
-		//ADS_LOG_RETURN((LP_ERROR, "invalid priority %d\n", p),-1);
+		////ADS_LOG_RETURN((LP_ERROR, "invalid priority %d\n", p),-1);
 
 	return 0;
 }
@@ -162,6 +164,10 @@ Ads_Service_Base::dispatch_message(Ads_Message_Base *msg) {
 	}
 	case Ads_Message_Base::MESSAGE_IDLE:
 			return this->on_idle();
+	case Ads_Message_Base::MESSAGE_SERVICE: {
+		sleep(5);
+		return 0;
+	}
 	default:
 		ADS_ASSERT(0);
 		break;
@@ -206,8 +212,8 @@ Ads_Service_Base::release_message(Ads_Message_Base *msg) {
 
 /* zxliu modification */
 
-/* START_thread_safe */
-size_t
+/* mutex_added_function startpoint */
+size_t //checked
 Ads_Service_Base_TP_Adaptive::count_idle_threads() {
 	mutex_map.acquire();
 
@@ -222,7 +228,7 @@ Ads_Service_Base_TP_Adaptive::count_idle_threads() {
 	return all_idle;
 }
 
-int
+int //checked
 Ads_Service_Base_TP_Adaptive::thread_status_set(pthread_t pid, int set_sta) {
 	mutex_map.acquire();
 
@@ -235,17 +241,19 @@ Ads_Service_Base_TP_Adaptive::thread_status_set(pthread_t pid, int set_sta) {
 	return 0;
 }
 
-int
+int //checked
 Ads_Service_Base_TP_Adaptive::deleteNode(pthread_t target) {
 	mutex_map.acquire();
 
 	std::unordered_map<pthread_t, int>::iterator got = thread_ids_map.find(target);
-	if (got != thread_ids_map.end())
+	if (got != thread_ids_map.end()) {
 		thread_ids_map.erase(got);
+		this->n_threads_ --;
+	}
+
 	int res = thread_ids_map.find(target) == thread_ids_map.end() ? 1:0;
 	std::cout << "erase the pid: " << target << " , check success: " << res << std::endl;
 
-	this->n_threads_ --;
 	std::cout << "\ncurtail() thread_pool size: " << (int)n_threads_ << std::endl;
 	std::cout << "\nafter curtail, allthreads:" <<std::endl;
 	std::unordered_map<pthread_t, int>::iterator it = thread_ids_map.begin();
@@ -253,18 +261,18 @@ Ads_Service_Base_TP_Adaptive::deleteNode(pthread_t target) {
 		std::cout << it->first << " ";
 		it ++;
 	}
-	std::cout << "curtail_end()\n" <<std::endl;
+	std::cout << "delete_node_end()\n" <<std::endl;
 
 	mutex_map.release();
 	return 0;
 }
 
-int
+int //checked
 Ads_Service_Base_TP_Adaptive::extend_threadpool(int extend_scale) {
 	mutex_map.acquire();
 
 	extend_scale = TP_EXTEND_SCALE;
-	this->signal_worker_start = 0;
+	this->signal_worker_start = 0; //might be removerd, since all theads will get stuck due to mutex
 	size_t start_index = n_threads_;
 	n_threads_ += (n_threads_ / extend_scale);
 
@@ -276,8 +284,9 @@ Ads_Service_Base_TP_Adaptive::extend_threadpool(int extend_scale) {
 		pthread_t pth_id;
 		pthread_attr_t *attr = 0;
 		attr = &_attr;
+
 		int ret = ::pthread_create(&pth_id, attr, &Ads_Service_Base_TP_Adaptive::svc_run, this);
-		if (ret != 0) std::cout << "failed to create thread " << i << std::endl;
+		if (ret != 0) std::cout << "failed to create thread " << pth_id << std::endl;
 		thread_ids_map[pth_id] = 0;
 	}
 
@@ -289,15 +298,15 @@ Ads_Service_Base_TP_Adaptive::extend_threadpool(int extend_scale) {
 		it ++;
 	}
 	std::cout << "extend_end()\n" <<std::endl;
-	this->signal_worker_start = 1;
 
+	this->signal_worker_start = 1; //might be removerd
 	mutex_map.release();
 	return 0;
 }
 
-/* END_thread_safe */
+/* mutex_added_function endpoint */
 
-int
+int //chekded
 Ads_Service_Base_TP_Adaptive::curtail_threadpool(int curtail_size) {
 	int curtail_counter = 0;
 	while (1) {
@@ -314,7 +323,8 @@ Ads_Service_Base_TP_Adaptive::curtail_threadpool(int curtail_size) {
 	return 0;
 }
 
-int
+/* override fucntions */
+int //chekced
 Ads_Service_Base_TP_Adaptive::open() {
 	/* supervisor thread initial */
 	pthread_attr_t _sattr;
@@ -334,11 +344,13 @@ Ads_Service_Base_TP_Adaptive::open() {
 	for (size_t i = 0; i < n_threads_; ++ i) {
 		pthread_t pth_id;
 		pthread_attr_t *attr = 0;
+
 		#if defined(ADS_ENABLE_SEARCH) || defined(ADS_ENABLE_MACOSX)
 		attr = &_attr;
 		#endif
+
 		int ret = ::pthread_create(&pth_id, attr, &Ads_Service_Base_TP_Adaptive::svc_run, this);
-		if (ret != 0) std::cout << "failed to create thread " << i << std::endl;
+		if (ret != 0) std::cout << "failed to create thread " << pth_id << std::endl;
 		thread_ids_map[pth_id] = 0;
 	}
 
@@ -358,70 +370,6 @@ Ads_Service_Base_TP_Adaptive::open() {
 	return 0;
 }
 
-void *
-Ads_Service_Base_TP_Adaptive::supervisor_func_run(void *arg) {
-	Ads_Service_Base_TP_Adaptive *s = reinterpret_cast<Ads_Service_Base_TP_Adaptive *>(arg);
-	s->supervisor_func();
-
-	return 0;
-}
-
-int
-Ads_Service_Base_TP_Adaptive::supervisor_func() {
-	int try_extend = 0;
-	while (!this->signal_supervisor_start)
-		;
-	while (!this->signal_supervisor_exit) {
-		sleep(1);
-		try_extend ++;
-		if ((int)this->message_count() == 0 && this->count_idle_threads() >= TP_IDLE_THRESHOLD) {
-			std::cout << "do curtail" << std::endl;
-			this->curtail_threadpool(TP_CURTAIL_SIZE);
-		}
-		else if (try_extend >= TIME_THRESHOLD && (int)this->message_count() >= MQ_THRESHOLD) {
-			std::cout << "do extend" << std::endl;
-			this->extend_threadpool(TP_EXTEND_SCALE);
-			try_extend = 0;
-		}
-	}
-	return 0;
-}
-
-int
-Ads_Service_Base_TP_Adaptive::svc() {
-	Ads_Message_Base *msg = 0;
-	while (!this->signal_worker_start)
-		;
-	while (msg_queue_.dequeue(msg) >= 0) {
-		if(this->exitting_) {
-			msg->destroy();
-			break;
-		}
-
-		if (msg->type() == Ads_Message_Base::MESSAGE_SERVICE && this->thread_status_set(pthread_self(), 1))
-			std::cout << "set thread status failed 1 " << std::endl;
-
-		int dispatch_return = this->dispatch_message(msg);
-		if (dispatch_return < 0)
-			std::cout << "failed to dispatch msg" << std::endl;
-
-
-		/* terminate current thread */
-		if (dispatch_return == SIGNAL_EXIT_THREAD) {
-			msg->destroy();
-			return 0;
-		}
-
-		if (msg->type() == Ads_Message_Base::MESSAGE_SERVICE && this->thread_status_set(pthread_self(), 0))
-			std::cout << "set thread status failed 0" << std::endl;
-
-		msg->destroy();
-		this->time_last_activity_ = ads::gettimeofday();
-
-	}
-	return 0;
-}
-
 int
 Ads_Service_Base_TP_Adaptive::wait() {
 	//mutex_map.acquire();
@@ -438,23 +386,32 @@ Ads_Service_Base_TP_Adaptive::wait() {
 	return 0;
 }
 
-int
+int //checked
 Ads_Service_Base_TP_Adaptive::stop() {
 	std::cout << "stop() in " << std::endl;
-	this->signal_supervisor_exit = 1;
 	this->exitting_ = true;
 
 	::pthread_join(supervisor_id, 0);
 	std::cout << "join() supervisor done " << std::endl;
 
-	for (int i = 0; i < n_threads_; ++ i) {
+	for (int i = 0; i < (int)n_threads_; ++ i) {
 		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
-		if (this->post_message(msg) < 0) {
+		while (this->post_message(msg) < 0) {
 			msg->destroy();
 			std::cout << "cannot post exit message " << std::endl;
-			i --;
+			Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
 		}
 	}
+	/*
+	for (int i = 0; i < (int)thread_ids_map.size(); ++ i) {
+		Ads_Message_Base * msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
+		if(this->post_message(msg) < 0) {
+			msg->destroy();
+			Ads_Message_Base * msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_EXIT);
+			if (this->post_message(msg) < 0)
+				msg->destroy();
+		}
+	}*/
 
 	this->wait();
 
@@ -466,7 +423,7 @@ Ads_Service_Base_TP_Adaptive::stop() {
 	return 0;
 }
 
-int
+int //checked
 Ads_Service_Base_TP_Adaptive::release_message(Ads_Message_Base *msg) {
 	ADS_ASSERT(msg != 0);
 
@@ -488,14 +445,13 @@ Ads_Service_Base_TP_Adaptive::release_message(Ads_Message_Base *msg) {
 	return 0;
 }
 
-int
+int //checked
 Ads_Service_Base_TP_Adaptive::dispatch_message(Ads_Message_Base *msg) {
 	ADS_ASSERT(msg != 0);
 	switch (msg->type()) {
 	// exit log manager
 	case Ads_Message_Base::MESSAGE_EXIT: {
 			this->exitting_ = true;
-			this->signal_supervisor_exit = 1;
 			return 0;
 	}
 	case Ads_Message_Base::MESSAGE_IDLE:
@@ -504,9 +460,8 @@ Ads_Service_Base_TP_Adaptive::dispatch_message(Ads_Message_Base *msg) {
 		if ((int)n_threads_ > TP_MIN_THRESHOLD) {
 			if (!this->deleteNode(pthread_self()))
 				return SIGNAL_EXIT_THREAD;
-				//pthread_exit(0);
 		}
-		else std::cout << "curtail action forbidden: thread_pool size is: " << (int)n_threads_ <<std::endl;
+		else std::cout << "curtail action forbidden: thread_pool size is: " << (int)n_threads_ << std::endl;
 		return 0;
 	}
 	case Ads_Message_Base::MESSAGE_SERVICE: {
@@ -521,9 +476,79 @@ Ads_Service_Base_TP_Adaptive::dispatch_message(Ads_Message_Base *msg) {
 	return 0;
 }
 
+/* thread fucntions */
+void * //checked
+Ads_Service_Base_TP_Adaptive::supervisor_func_run(void *arg) {
+	Ads_Service_Base_TP_Adaptive *s = reinterpret_cast<Ads_Service_Base_TP_Adaptive *>(arg);
+	s->supervisor_func();
+
+	return 0;
+}
+
+int //checked
+Ads_Service_Base_TP_Adaptive::supervisor_func() {
+	int try_extend = 0;
+	while (!this->signal_supervisor_start)
+		;
+	while (1) {
+		if(this->exitting_) return 0;
+
+		sleep(1);
+		try_extend ++;
+		if ((int)this->message_count() == 0 && this->count_idle_threads() >= TP_IDLE_THRESHOLD) {
+			std::cout << "do curtail" << std::endl;
+			this->curtail_threadpool(TP_CURTAIL_SIZE);
+		}
+		else if (try_extend >= EXTEND_TIME_THRESHOLD && (int)this->message_count() >= MQ_THRESHOLD) {
+			std::cout << "do extend" << std::endl;
+			this->extend_threadpool(TP_EXTEND_SCALE);
+			try_extend = 0;
+		}
+	}
+	return 0;
+}
+
+int //checked
+Ads_Service_Base_TP_Adaptive::svc() {
+	Ads_Message_Base *msg = 0;
+	while (!this->signal_worker_start)
+		;
+	while (msg_queue_.dequeue(msg) >= 0) {
+		if(this->exitting_) {
+			msg->destroy();
+			break;
+		}
+
+		if (msg->type() == Ads_Message_Base::MESSAGE_SERVICE)
+			if(this->thread_status_set(pthread_self(), 1))
+				std::cout << "set thread status failed 1 " << std::endl;
+
+		int dispatch_return = this->dispatch_message(msg);
+		/* terminate current thread */
+		if (dispatch_return == SIGNAL_EXIT_THREAD) {
+			msg->destroy();
+			::pthread_detach(pthread_self());
+			return 0;
+		}
+		else if (dispatch_return < 0)
+			std::cout << "failed to dispatch msg" << std::endl;
+
+		if (msg->type() == Ads_Message_Base::MESSAGE_SERVICE )
+			if(this->thread_status_set(pthread_self(), 0))
+				std::cout << "set thread status failed 0" << std::endl;
+
+		msg->destroy();
+		this->time_last_activity_ = ads::gettimeofday();
+	}
+
+	return 0;
+}
+
+/* main tester */
 int main() {
 	Ads_Service_Base_TP_Adaptive testASB;
 	testASB.num_threads(5);
+
 	for (int i = 0; i < 1; ++ i) {
 		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
 		testASB.post_message(msg);
@@ -543,5 +568,22 @@ int main() {
 	sleep(10);
 
 	if(!testASB.stop()) std::cout << "stop() done" << std::endl;
+
 	return 0;
 }
+/*
+int main() {
+	Ads_Service_Base testOR;
+	testOR.num_threads(5);
+	for (int i = 0; i < 10; ++ i) {
+		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
+		testOR.post_message(msg);
+	}
+	std::cout << "MQ: Message count =  " << testOR.message_count() << std::endl;
+	if(!testOR.open()) std::cout << "open() down" << std::endl;
+	sleep(5);
+	if(!testOR.stop()) std::cout << "stop() done" << std::endl;
+
+	return 0;
+}
+*/

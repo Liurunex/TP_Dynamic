@@ -372,43 +372,43 @@ protected:
 /* zxliu modification */
 #include <unordered_map>
 
-#define MQ_THRESHOLD 10
-#define TIME_THRESHOLD 3
+#define MQ_THRESHOLD 5
+#define EXTEND_TIME_THRESHOLD 3
 #define TP_MIN_THRESHOLD 3
 #define TP_EXTEND_SCALE 2
 #define TP_CURTAIL_SIZE 1
 #define TP_IDLE_THRESHOLD 2
-#define SIGNAL_EXIT_THREAD 9
+#define SIGNAL_EXIT_THREAD 9 /* must be positive */
 
 class Ads_Service_Base_TP_Adaptive: public Ads_Service_Base {
 public:
-
 	Ads_Service_Base_TP_Adaptive()
 	: Ads_Service_Base(), mutex_map()
-	, signal_supervisor_start(0), signal_supervisor_exit(0)
+	, signal_supervisor_start(0)
 	, signal_worker_start(0)
 	{}
 
+	/* override base function */
 	int open();
 	int wait();
 	int stop();
 	int svc();
+	int dispatch_message(Ads_Message_Base *msg);
+	int release_message(Ads_Message_Base *msg);
 
+	/* thread_pool size_modification function */
 	int extend_threadpool(int extend_scale);
 	int curtail_threadpool(int curtail_size);
 
+	/* the supervisor fucntion for test */
 	int supervisor_func();
 	static void *supervisor_func_run(void *arg);
-
-	int dispatch_message(Ads_Message_Base *msg);
-	int release_message(Ads_Message_Base *msg);
 
 protected:
 	ads::Mutex mutex_map;
 	std::unordered_map<pthread_t, int> thread_ids_map;
 	pthread_t supervisor_id;
 
-	volatile int signal_supervisor_exit;
 	volatile int signal_supervisor_start;
 	volatile int signal_worker_start;
 
