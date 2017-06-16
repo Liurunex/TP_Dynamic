@@ -21,6 +21,7 @@
 #include <thread>
 #include <functional>
 #include <sys/time.h>
+#include <memory>
 
 #include "Ads_Service_Base.h"
 Ads_Message_Base *
@@ -535,11 +536,42 @@ Ads_Service_Base_TP_Adaptive::svc() {
 }
 
 /* main tester */
-int main() {
-	std::vector<Ads_Service_Base_TP_Adaptive *> testGroup;
 
-	for (int j = 0; j < 5; j ++) {
-		testGroup.push_back(new Ads_Service_Base_TP_Adaptive());
+/* indivadual threadpool test
+int main() {
+	Ads_Service_Base_TP_Adaptive test;
+	test.num_threads(5);
+
+	for (int i = 0; i < 1; ++ i) {
+		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
+		test.post_message(msg);
+	}
+	std::cout << "MQ:" << " Message count =  " << test.message_count() << std::endl;
+
+	if(!test.open()) std::cout << "open() down" << std::endl;
+
+	sleep(5);
+
+	for (int i = 0; i < 10; ++ i) {
+		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
+		test.post_message(msg);
+	}
+	std::cout << "MQ:" << " Message count =  " << test.message_count() << std::endl;
+
+	sleep(5);
+
+	if(!test.stop()) std::cout << "stop() done" << std::endl;
+	return 0;
+}
+*/
+
+/* mutiple threadpood test */
+int main() {
+
+	std::vector<std::unique_ptr<Ads_Service_Base>> testGroup;
+
+	for (int j = 0; j < 5; ++ j) {
+		testGroup.push_back(std::unique_ptr<Ads_Service_Base> (new Ads_Service_Base_TP_Adaptive()));
 		testGroup.back()->num_threads(5);
 
 		for (int i = 0; i < 1; ++ i) {
@@ -549,12 +581,12 @@ int main() {
 		std::cout << "MQ:" << j << " Message count =  " << testGroup.back()->message_count() << std::endl;
 	}
 
-	for (int j = 0; j < 5; j ++)
-		if(!testGroup[j]->open()) std::cout << "TP: " << j << "open() down" << std::endl;;
+	for (int j = 0; j < 5; ++ j)
+		if(!testGroup[j]->open()) std::cout << "TP: " << j << "open() down" << std::endl;
 
 	sleep(5);
 
-	for (int j = 0; j < 5; j ++) {
+	for (int j = 0; j < 5; ++ j) {
 		for (int i = 0; i < 10; ++ i) {
 			Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
 			testGroup[j]->post_message(msg);
@@ -564,9 +596,8 @@ int main() {
 
 	sleep(5);
 
-	for (int j = 0; j < 5; j ++) {
+	for (int j = 0; j < 5; ++ j) {
 		if(!testGroup[j]->stop()) std::cout << "TP: " << j << "stop() done" << std::endl;
 	}
-
 	return 0;
 }

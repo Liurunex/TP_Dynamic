@@ -388,6 +388,8 @@ public:
 	, signal_worker_start(0)
 	{}
 
+	~Ads_Service_Base_TP_Adaptive() {thread_ids_map.clear();}
+
 	/* override base function */
 	int open();
 	int wait();
