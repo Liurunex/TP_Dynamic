@@ -616,13 +616,13 @@ int main() {
 	if (!supervisor_test.openself()) std::cout << "supervisor open down" << std::endl;
 
 	for (int j = 0; j < (int)supervisor_test.return_ntp(); ++ j) {
-		supervisor_test.return_tp_group().back()->num_threads(5);
+		supervisor_test.return_tp_group()->back()->num_threads(5);
 
 		for (int i = 0; i < 10; ++ i) {
 			Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
-			supervisor_test.return_tp_group().back()->post_message(msg);
+			supervisor_test.return_tp_group()->back()->post_message(msg);
 		}
-		std::cout << "MQ:" << j << " Message count =  " << supervisor_test.return_tp_group().back()->message_count() << std::endl;
+		std::cout << "MQ:" << j << " Message count =  " << supervisor_test.return_tp_group()->back()->message_count() << std::endl;
 	}
 
 	if (!supervisor_test.openworker()) std::cout << "supervisor open all worker and start working" << std::endl;
@@ -632,9 +632,9 @@ int main() {
 	for (int j = 0; j < (int)supervisor_test.return_ntp(); ++ j) {
 		for (int i = 0; i < 10; ++ i) {
 			Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
-			supervisor_test.return_tp_group()[j]->post_message(msg);
+			supervisor_test.return_tp_group()->at(j)->post_message(msg);
 		}
-		std::cout << "MQ:" << j << " Message count =  " << supervisor_test.return_tp_group()[j]->message_count() << std::endl;
+		std::cout << "MQ:" << j << " Message count =  " << supervisor_test.return_tp_group()->at(j)->message_count() << std::endl;
 	}
 
 	sleep(5);

@@ -439,7 +439,7 @@ public:
 	void num_tp(int i)	{ this->n_tp_ = i; }
 
 	size_t return_ntp() { return this->n_tp_; }
-	std::vector<std::unique_ptr<Ads_Service_Base_TP_Adaptive>> return_tp_group() { return this->tp_group; }
+	std::vector<std::unique_ptr<Ads_Service_Base_TP_Adaptive>> *return_tp_group() { return &(this->tp_group); }
 
 	void set_thread_limit(int i)	{ this->threads_size_limit = i > THREAD_LMIT ? THREAD_LMIT:i; }
 	int threads_sum();
@@ -455,6 +455,7 @@ protected:
 	int idle_thread_count;
 
 	std::vector<std::unique_ptr<Ads_Service_Base_TP_Adaptive>> tp_group;
+	//std::vector<std::unique_ptr<Ads_Service_Base>> tp_group;
 	std::vector<int> tp_modification;
 };
 #endif /* ADS_SERVICE_BASE_H */
