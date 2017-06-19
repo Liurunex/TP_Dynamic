@@ -375,7 +375,7 @@ protected:
 #define MQ_THRESHOLD 5
 #define EXTEND_TIME_THRESHOLD 3
 #define TP_MIN_THRESHOLD 3
-#define TP_EXTEND_SCALE 2
+#define TP_EXTEND_SIZE 2
 #define TP_CURTAIL_SIZE 1
 #define TP_IDLE_THRESHOLD 2
 #define SIGNAL_EXIT_THREAD 9 /* must be positive */
@@ -412,11 +412,17 @@ protected:
 	size_t count_idle_threads();
 };
 
+/* indivadual supervisor */
+#define THREAD_LMIT 100
+#define TP_MODIFY_CURTAIL_SCALE 1
+#define TP_MODIFY_EXTEND_SCALE 1
+
 class Ads_Service_Base_Supervisor {
 public:
 	Ads_Service_Base_Supervisor()
-	: signal_supervisor_start(0)
-	, n_tp_(1), exitting_(false)
+	: signal_supervisor_start(0), n_tp_(1)
+	, exitting_(false), threads_size_limit(50)
+	, waiting_mq_count(0), idle_thread_count(0)
 	{}
 
 	~Ads_Service_Base_Supervisor();
@@ -426,13 +432,20 @@ public:
 	int stop();
 	int supervisor_func();
 	static void *supervisor_func_run(void *arg);
-	void num_tp(int i)		{ this->n_tp_ = i; }
+	void num_tp(int i)	{ this->n_tp_ = i; }
+	void set_thread_limit(int i)	{ this->threads_size_limit = i > THREAD_LMIT ? THREAD_LMIT:i; }
 
 protected:
 	pthread_t supervisor_id;
 	volatile int signal_supervisor_start;
-	size_t n_tp_;
 	volatile bool exitting_;
+
+	size_t n_tp_;
+	size_t threads_size_limit;
+	int waiting_mq_count;
+	int idle_thread_count;
+
 	std::vector<std::unique_ptr<Ads_Service_Base>> tp_group;
+	std::vector<int> tp_modification;
 }
 #endif /* ADS_SERVICE_BASE_H */

@@ -266,12 +266,12 @@ Ads_Service_Base_TP_Adaptive::deleteNode(pthread_t target) {
 }
 
 int
-Ads_Service_Base_TP_Adaptive::extend_threadpool(int extend_scale) {
+Ads_Service_Base_TP_Adaptive::extend_threadpool(int extend_size) {
 	mutex_map.acquire();
 
 	this->signal_worker_start = 0; //might be removerd, since all theads will get stuck due to mutex
 	size_t start_index = n_threads_;
-	n_threads_ += (n_threads_ / extend_scale);
+	n_threads_ += extend_size;
 
 	pthread_attr_t _attr;
 	pthread_attr_init(&_attr);
@@ -493,6 +493,8 @@ Ads_Service_Base_TP_Adaptive::svc() {
 int
 Ads_Service_Base_Supervisor::openself() {
 	/* supervisor thread initial */
+	tp_modification.resize(n_tp_);
+
 	pthread_attr_t _sattr;
 	pthread_attr_init(&_sattr);
 	pthread_attr_t *sattr;
@@ -502,8 +504,6 @@ Ads_Service_Base_Supervisor::openself() {
 	else {
 		for (int i = 0; i < (int)n_tp_; ++ i)
 			tp_group.push_back(std::unique_ptr<Ads_Service_Base> (new Ads_Service_Base_TP_Adaptive()));
-		/* make supervisor to work*/
-		signal_supervisor_start = 1;
 	}
 
 	return 0;
@@ -511,11 +511,16 @@ Ads_Service_Base_Supervisor::openself() {
 
 int
 Ads_Service_Base_Supervisor::openworker()() {
+	for (int i = 0; i < (int)this->n_tp_; ++ i)
+		if (!tp_group[i]->open()) std::cout << "TP: " << i << "open() down" << std::endl;
 
+	/* make supervisor to work after open all workers*/
+	signal_supervisor_start = 1;
+	return 0;
 }
 
 int
-Ads_Service_Base_Supervisor() {
+Ads_Service_Base_Supervisor::stop() {
 	std::cout << "supervisor stop() in" << std::endl;
 	this->exitting_ = true;
 
@@ -523,7 +528,7 @@ Ads_Service_Base_Supervisor() {
 	std::cout << "supervisor join() supervisor done " << std::endl;
 
 	for (int i =0; i < (int)n_tp_; ++ i)
-		if(!tp_group[i]->stop()) std::cout << "TP: " << i << "stop() done" << std::endl;
+		if (!tp_group[i]->stop()) std::cout << "TP: " << i << "stop() done" << std::endl;
 
 	return 0;
 }
@@ -538,63 +543,66 @@ Ads_Service_Base_Supervisor::supervisor_func_run(void *arg) {
 
 int
 Ads_Service_Base_Supervisor::supervisor_func() {
-	int try_extend = 0;
 	while (!this->signal_supervisor_start)
 		;
 	while (1) {
-		if(this->exitting_) return 0;
+		if (this->exitting_) return 0;
 
-		sleep(1);
-		try_extend ++;
-		if ((int)this->message_count() == 0 && this->count_idle_threads() >= TP_IDLE_THRESHOLD) {
-			std::cout << "do curtail" << std::endl;
-			this->curtail_threadpool(TP_CURTAIL_SIZE);
+		sleep(5);
+		waiting_mq_count = 0;
+		idle_thread_count = 0;
+		std::fill(tp_modification.begin(), tp_modification.end(), 0);
+
+		for (int i = 0; i < (int)n_tp_; ++ i) {
+			int wait_message = tp_group[i]->message_count();
+			int idle_threads = tp_group[i]->count_idle_threads();
+
+			if (wait_message >= MQ_THRESHOLD) {
+				tp_modification[i] = wait_message;
+				waiting_mq_count += wait_message;
+			}
+			else if (idle_threads > TP_IDLE_THRESHOLD) {
+				tp_modification[i] = -1 * idle_threads;
+				idle_thread_count += idle_threads;
+			}
 		}
-		else if (try_extend >= EXTEND_TIME_THRESHOLD && (int)this->message_count() >= MQ_THRESHOLD) {
-			std::cout << "do extend" << std::endl;
-			this->extend_threadpool(TP_EXTEND_SCALE);
-			try_extend = 0;
+
+		int extend_sum = waiting_mq_count / TP_MODIFY_EXTEND_SCALE;
+		int curtail_sum = idle_thread_count / TP_MODIFY_CURTAIL_SCALE;
+		int add_thread_size =  extend_sum - curtail_sum;
+
+		if (n_tp_ + add_thread_size == THREAD_LMIT) continue;
+		else if (n_tp_ + add_thread_size > THREAD_LMIT) {
+			extend_sum = add_thread_size / (n_tp_ - THREAD_LMIT) * extend_sum;
+			curtail_sum = extend_sum - (n_tp_ - THREAD_LMIT)
+			n_tp_ = THREAD_LMIT;
 		}
+		else n_tp_ += add_thread_size;
+
+		/* individual thread modify */
+		for (int i = 0; i < (int)n_tp_; ++ i) {
+			if (tp_modification[i] > 0) {
+				std::cout << "Thread_Pool: " << i << "do extend" << std::endl;
+				int to_extend = tp_modification[i] / waiting_mq_count * extend_sum;
+				tp_group[i]->extend_threadpool(to_extend);
+			}
+			else if (tp_modification[i] < 0) {
+				std::cout << "Thread_Pool: " << i << "do curtail" << std::endl;
+				int to_curtail = -1 * tp_modification[i] / idle_thread_count * curtail_sum;
+				tp_group[i]->curtail_threadpool(to_curtail));
+			}
+		}
+
 	}
 	return 0;
 }
 
 
 /* main tester */
-
-/* indivadual threadpool test
-int main() {
-	Ads_Service_Base_TP_Adaptive test;
-	test.num_threads(5);
-
-	for (int i = 0; i < 1; ++ i) {
-		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
-		test.post_message(msg);
-	}
-	std::cout << "MQ:" << " Message count =  " << test.message_count() << std::endl;
-
-	if(!test.open()) std::cout << "open() down" << std::endl;
-
-	sleep(5);
-
-	for (int i = 0; i < 10; ++ i) {
-		Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
-		test.post_message(msg);
-	}
-	std::cout << "MQ:" << " Message count =  " << test.message_count() << std::endl;
-
-	sleep(5);
-
-	if(!test.stop()) std::cout << "stop() done" << std::endl;
-	return 0;
-}
-*/
-
-/* mutiple threadpood test */
 int main() {
 	Ads_Service_Base_Supervisor supervisor_test;
 	supervisor_test.num_tp(5);
-	if (!supervisor_test.open()) std::cout << ""
+	if (!supervisor_test.openself()) std::cout << "supervisor open down" << std::endl;
 
 	for (int j = 0; j < (int)supervisor_test.n_tp_; ++ j) {
 		supervisor_test.tp_group.back()->num_threads(5);
@@ -606,8 +614,7 @@ int main() {
 		std::cout << "MQ:" << j << " Message count =  " << supervisor_test.tp_group.back()->message_count() << std::endl;
 	}
 
-	for (int j = 0; j < (int)supervisor_test.n_tp_; ++ j)
-		if(!supervisor_test.tp_group[j]->open()) std::cout << "TP: " << j << "open() down" << std::endl;
+	if (!supervisor_test.openworker()) std::cout << "supervisor open all worker and start working" << std::endl;
 
 	sleep(5);
 
