@@ -402,6 +402,8 @@ public:
 	int extend_threadpool(int extend_scale);
 	int curtail_threadpool(int curtail_size);
 
+	size_t tp_size() { return (int)this->n_threads_; }
+
 	/* the supervisor fucntion for test */
 	int supervisor_func();
 	static void *supervisor_func_run(void *arg);

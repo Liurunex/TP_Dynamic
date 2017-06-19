@@ -366,7 +366,6 @@ Ads_Service_Base_TP_Adaptive::wait() {
 	std::unordered_map<pthread_t, int>::iterator it = thread_ids_map.begin();
 
 	while(it != thread_ids_map.end()) {
-		if (it->first == supervisor_id) continue;
 		::pthread_join(it->first, 0);
 		std::cout << "join: " << it->first << std::endl;
 		it ++;
@@ -499,18 +498,18 @@ Ads_Service_Base_Supervisor::openself() {
 	pthread_attr_init(&_sattr);
 	pthread_attr_t *sattr;
 	sattr = &_sattr;
-	if (::pthread_create(&supervisor_id, sattr, &Ads_Service_Base_TP_Adaptive::supervisor_func_run, this))
+	if (::pthread_create(&supervisor_id, sattr, &Ads_Service_Base_Supervisor::supervisor_func_run, this))
 		std::cout << "failed to create supervisor thread" << std::endl;
 	else {
 		for (int i = 0; i < (int)n_tp_; ++ i)
-			tp_group.push_back(std::unique_ptr<Ads_Service_Base> (new Ads_Service_Base_TP_Adaptive()));
+			tp_group.push_back(std::unique_ptr<Ads_Service_Base_TP_Adaptive> (new Ads_Service_Base_TP_Adaptive()));
 	}
 
 	return 0;
 }
 
 int
-Ads_Service_Base_Supervisor::openworker()() {
+Ads_Service_Base_Supervisor::openworker() {
 	for (int i = 0; i < (int)this->n_tp_; ++ i)
 		if (!tp_group[i]->open()) std::cout << "TP: " << i << "open() down" << std::endl;
 
@@ -533,6 +532,14 @@ Ads_Service_Base_Supervisor::stop() {
 	return 0;
 }
 
+int
+Ads_Service_Base_Supervisor::threads_sum() {
+	int res = 0;
+	for (int i = 0; i < (int)n_tp_; ++ i)
+		res += (int)tp_group[i]->tp_size();
+	return res;
+}
+
 void *
 Ads_Service_Base_Supervisor::supervisor_func_run(void *arg) {
 	Ads_Service_Base_Supervisor *s = reinterpret_cast<Ads_Service_Base_Supervisor *>(arg);
@@ -551,11 +558,13 @@ Ads_Service_Base_Supervisor::supervisor_func() {
 		sleep(5);
 		waiting_mq_count = 0;
 		idle_thread_count = 0;
+		int all_threads_size = 0;
 		std::fill(tp_modification.begin(), tp_modification.end(), 0);
 
 		for (int i = 0; i < (int)n_tp_; ++ i) {
 			int wait_message = tp_group[i]->message_count();
 			int idle_threads = tp_group[i]->count_idle_threads();
+			all_threads_size += tp_group[i]->tp_size();
 
 			if (wait_message >= MQ_THRESHOLD) {
 				tp_modification[i] = wait_message;
@@ -569,15 +578,15 @@ Ads_Service_Base_Supervisor::supervisor_func() {
 
 		int extend_sum = waiting_mq_count / TP_MODIFY_EXTEND_SCALE;
 		int curtail_sum = idle_thread_count / TP_MODIFY_CURTAIL_SCALE;
-		int add_thread_size =  extend_sum - curtail_sum;
+		int modify_thread_size =  extend_sum - curtail_sum;
 
-		if (n_tp_ + add_thread_size == THREAD_LMIT) continue;
-		else if (n_tp_ + add_thread_size > THREAD_LMIT) {
-			extend_sum = add_thread_size / (n_tp_ - THREAD_LMIT) * extend_sum;
-			curtail_sum = extend_sum - (n_tp_ - THREAD_LMIT)
-			n_tp_ = THREAD_LMIT;
+		if (all_threads_size == THREAD_LMIT) continue;
+		else if (all_threads_size + modify_thread_size > THREAD_LMIT) {
+			extend_sum =  (THREAD_LMIT - all_threads_size) / modify_thread_size * extend_sum;
+			curtail_sum = extend_sum - (THREAD_LMIT - all_threads_size);
+			all_threads_size = THREAD_LMIT;
 		}
-		else n_tp_ += add_thread_size;
+		else all_threads_size += modify_thread_size;
 
 		/* individual thread modify */
 		for (int i = 0; i < (int)n_tp_; ++ i) {
@@ -589,7 +598,7 @@ Ads_Service_Base_Supervisor::supervisor_func() {
 			else if (tp_modification[i] < 0) {
 				std::cout << "Thread_Pool: " << i << "do curtail" << std::endl;
 				int to_curtail = -1 * tp_modification[i] / idle_thread_count * curtail_sum;
-				tp_group[i]->curtail_threadpool(to_curtail));
+				tp_group[i]->curtail_threadpool(to_curtail);
 			}
 		}
 
@@ -599,31 +608,33 @@ Ads_Service_Base_Supervisor::supervisor_func() {
 
 
 /* main tester */
+
 int main() {
 	Ads_Service_Base_Supervisor supervisor_test;
-	supervisor_test.num_tp(5);
+	supervisor_test.set_thread_limit(100);
+	supervisor_test.num_tp(2);
 	if (!supervisor_test.openself()) std::cout << "supervisor open down" << std::endl;
 
-	for (int j = 0; j < (int)supervisor_test.n_tp_; ++ j) {
-		supervisor_test.tp_group.back()->num_threads(5);
+	for (int j = 0; j < (int)supervisor_test.return_ntp(); ++ j) {
+		supervisor_test.return_tp_group().back()->num_threads(5);
 
-		for (int i = 0; i < 1; ++ i) {
+		for (int i = 0; i < 10; ++ i) {
 			Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
-			supervisor_test.tp_group.back()->post_message(msg);
+			supervisor_test.return_tp_group().back()->post_message(msg);
 		}
-		std::cout << "MQ:" << j << " Message count =  " << supervisor_test.tp_group.back()->message_count() << std::endl;
+		std::cout << "MQ:" << j << " Message count =  " << supervisor_test.return_tp_group().back()->message_count() << std::endl;
 	}
 
 	if (!supervisor_test.openworker()) std::cout << "supervisor open all worker and start working" << std::endl;
 
 	sleep(5);
 
-	for (int j = 0; j < (int)supervisor_test.n_tp_; ++ j) {
+	for (int j = 0; j < (int)supervisor_test.return_ntp(); ++ j) {
 		for (int i = 0; i < 10; ++ i) {
 			Ads_Message_Base *msg = Ads_Message_Base::create(Ads_Message_Base::MESSAGE_SERVICE);
-			supervisor_test.tp_group[j]->post_message(msg);
+			supervisor_test.return_tp_group()[j]->post_message(msg);
 		}
-		std::cout << "MQ:" << j << " Message count =  " << supervisor_test.tp_group[j]->message_count() << std::endl;
+		std::cout << "MQ:" << j << " Message count =  " << supervisor_test.return_tp_group()[j]->message_count() << std::endl;
 	}
 
 	sleep(5);

@@ -565,7 +565,7 @@ int main() {
 }
 */
 
-/* mutiple threadpood test */
+/* mutiple threadpood test
 int main() {
 
 	std::vector<std::unique_ptr<Ads_Service_Base>> testGroup;
@@ -600,4 +600,11 @@ int main() {
 		if(!testGroup[j]->stop()) std::cout << "TP: " << j << "stop() done" << std::endl;
 	}
 	return 0;
+}
+*/
+
+int main() {
+	std::vector<Ads_Service_Base_TP_Adaptive *> myvector;
+	myvector.push_back(new Ads_Service_Base_TP_Adaptive());
+	std::cout << myvector.back()->tp_size() << std::endl;
 }

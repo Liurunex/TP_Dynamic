@@ -401,6 +401,9 @@ public:
 	int extend_threadpool(int extend_scale);
 	int curtail_threadpool(int curtail_size);
 
+	size_t tp_size() { return (int)this->n_threads_; }
+	size_t count_idle_threads();
+
 protected:
 	ads::Mutex mutex_map;
 	std::unordered_map<pthread_t, int> thread_ids_map;
@@ -409,8 +412,9 @@ protected:
 
 	int deleteNode(pthread_t target);
 	int thread_status_set(pthread_t pid, int set_sta);
-	size_t count_idle_threads();
+
 };
+
 
 /* indivadual supervisor */
 #define THREAD_LMIT 100
@@ -433,7 +437,12 @@ public:
 	int supervisor_func();
 	static void *supervisor_func_run(void *arg);
 	void num_tp(int i)	{ this->n_tp_ = i; }
+
+	size_t return_ntp() { return this->n_tp_; }
+	std::vector<std::unique_ptr<Ads_Service_Base_TP_Adaptive>> return_tp_group() { return this->tp_group; }
+
 	void set_thread_limit(int i)	{ this->threads_size_limit = i > THREAD_LMIT ? THREAD_LMIT:i; }
+	int threads_sum();
 
 protected:
 	pthread_t supervisor_id;
@@ -445,7 +454,7 @@ protected:
 	int waiting_mq_count;
 	int idle_thread_count;
 
-	std::vector<std::unique_ptr<Ads_Service_Base>> tp_group;
+	std::vector<std::unique_ptr<Ads_Service_Base_TP_Adaptive>> tp_group;
 	std::vector<int> tp_modification;
-}
+};
 #endif /* ADS_SERVICE_BASE_H */
