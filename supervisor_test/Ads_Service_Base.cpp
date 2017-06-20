@@ -610,6 +610,8 @@ Ads_Service_Base_Supervisor::supervisor_func() {
 		}
 		else all_threads_size += modify_thread_size;
 
+		std::cout << "currnet threads count: " << all_threads_size << std::endl;
+
 		/* individual thread modify */
 		for (int i = 0; i < (int)n_tp_; ++ i) {
 			if (tp_modification[i] > 0) {
