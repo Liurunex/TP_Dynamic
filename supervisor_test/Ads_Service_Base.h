@@ -373,10 +373,7 @@ protected:
 #include <unordered_map>
 
 #define MQ_THRESHOLD 			5
-#define EXTEND_TIME_THRESHOLD 	3
-#define TP_MIN_THRESHOLD 		3
-#define TP_EXTEND_SIZE 			2
-#define TP_CURTAIL_SIZE 		1
+#define TP_MIN_THRESHOLD 		2
 #define TP_IDLE_THRESHOLD 		2
 #define SIGNAL_EXIT_THREAD 		9 /* must be positive */
 
@@ -414,8 +411,8 @@ protected:
 
 /* indivadual supervisor */
 #define THREAD_LMIT 				100
-#define TP_MODIFY_CURTAIL_SCALE 	1
-#define TP_MODIFY_EXTEND_SCALE 		1
+#define TP_MODIFY_CURTAIL_SCALE 	2
+#define TP_MODIFY_EXTEND_SCALE 		2
 
 class Ads_Service_Base_Supervisor {
 public:
