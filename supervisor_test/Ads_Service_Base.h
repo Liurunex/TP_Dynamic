@@ -372,34 +372,30 @@ protected:
 /* zxliu modification */
 #include <unordered_map>
 
-#define MQ_THRESHOLD 5
-#define EXTEND_TIME_THRESHOLD 3
-#define TP_MIN_THRESHOLD 3
-#define TP_EXTEND_SIZE 2
-#define TP_CURTAIL_SIZE 1
-#define TP_IDLE_THRESHOLD 2
-#define SIGNAL_EXIT_THREAD 9 /* must be positive */
+#define MQ_THRESHOLD 			5
+#define EXTEND_TIME_THRESHOLD 	3
+#define TP_MIN_THRESHOLD 		3
+#define TP_EXTEND_SIZE 			2
+#define TP_CURTAIL_SIZE 		1
+#define TP_IDLE_THRESHOLD 		2
+#define SIGNAL_EXIT_THREAD 		9 /* must be positive */
 
 class Ads_Service_Base_TP_Adaptive: public Ads_Service_Base {
 public:
-	Ads_Service_Base_TP_Adaptive()
-	: Ads_Service_Base(), mutex_map()
-	, signal_worker_start(0)
-	{}
-
-	~Ads_Service_Base_TP_Adaptive() {thread_ids_map.clear();}
+	Ads_Service_Base_TP_Adaptive();
+	~Ads_Service_Base_TP_Adaptive();
 
 	/* override base function */
 	int open();
 	int wait();
 	int stop();
 	int svc();
-	int dispatch_message(Ads_Message_Base *msg);
-	int release_message(Ads_Message_Base *msg);
+	int dispatch_message	(Ads_Message_Base *msg);
+	int release_message 	(Ads_Message_Base *msg);
 
 	/* thread_pool size_modification function */
-	int extend_threadpool(int extend_scale);
-	int curtail_threadpool(int curtail_size);
+	int extend_threadpool	(int extend_scale);
+	int curtail_threadpool	(int curtail_size);
 
 	size_t tp_size() { return (int)this->n_threads_; }
 	size_t count_idle_threads();
@@ -410,52 +406,46 @@ protected:
 
 	volatile int signal_worker_start;
 
-	int deleteNode(pthread_t target);
-	int thread_status_set(pthread_t pid, int set_sta);
+	int deleteNode			(pthread_t target);
+	int thread_status_set	(pthread_t pid, int set_sta);
 
 };
 
 
 /* indivadual supervisor */
-#define THREAD_LMIT 100
-#define TP_MODIFY_CURTAIL_SCALE 1
-#define TP_MODIFY_EXTEND_SCALE 1
+#define THREAD_LMIT 				100
+#define TP_MODIFY_CURTAIL_SCALE 	1
+#define TP_MODIFY_EXTEND_SCALE 		1
 
 class Ads_Service_Base_Supervisor {
 public:
-	Ads_Service_Base_Supervisor()
-	: signal_supervisor_start(0), n_tp_(1)
-	, exitting_(false), threads_size_limit(50)
-	, waiting_mq_count(0), idle_thread_count(0)
-	{}
+	Ads_Service_Base_Supervisor();
+	virtual ~Ads_Service_Base_Supervisor();
 
-	~Ads_Service_Base_Supervisor();
-
+	int stop();
 	int openself();
 	int openworker();
-	int stop();
-	int supervisor_func();
-	static void *supervisor_func_run(void *arg);
-	void num_tp(int i)	{ this->n_tp_ = i; }
-
-	size_t return_ntp() { return this->n_tp_; }
-	std::vector<std::unique_ptr<Ads_Service_Base_TP_Adaptive>> *return_tp_group() { return &(this->tp_group); }
-
-	void set_thread_limit(int i)	{ this->threads_size_limit = i > THREAD_LMIT ? THREAD_LMIT:i; }
 	int threads_sum();
+	int supervisor_func();
+	
+	void 	num_tp(int i)			{ this->n_tp_ = i; }
+	size_t 	return_ntp() 			{ return this->n_tp_; }
+	void 	set_thread_limit(int i)	{ this->threads_size_limit = i > THREAD_LMIT ? THREAD_LMIT:i; }
+
+	static void *supervisor_func_run(void *arg);
+	std::vector<Ads_Service_Base_TP_Adaptive *> return_tp_group() { return this->tp_group; }
 
 protected:
-	pthread_t supervisor_id;
-	volatile int signal_supervisor_start;
-	volatile bool exitting_;
+	pthread_t 		supervisor_id;
+	volatile int 	signal_supervisor_start;
+	volatile bool 	exitting_;
 
 	size_t n_tp_;
 	size_t threads_size_limit;
 	int waiting_mq_count;
 	int idle_thread_count;
 
-	std::vector<std::unique_ptr<Ads_Service_Base_TP_Adaptive>> tp_group;
-	//std::vector<std::unique_ptr<Ads_Service_Base>> tp_group;
 	std::vector<int> tp_modification;
+	std::vector<Ads_Service_Base_TP_Adaptive *> tp_group;
 };
 #endif /* ADS_SERVICE_BASE_H */
