@@ -56,16 +56,7 @@ Ads_Service_Base_TP_Adaptive::deleteNode(pthread_t target) {
 
 	int res = thread_ids_map.find(target) == thread_ids_map.end() ? 1:0;
 	std::cout << "erase the pid: " << target << " , check success: " << res << std::endl;
-	/*
-	std::cout << "\ncurtail() thread_pool size: " << (int)n_threads_ << std::endl;
-	std::cout << "\nafter curtail, allthreads:" <<std::endl;
-	std::unordered_map<pthread_t, int>::iterator it = thread_ids_map.begin();
-	while(it != thread_ids_map.end()) {
-		std::cout << it->first << " ";
-		it ++;
-	}
-	std::cout << "delete_node_end()\n" <<std::endl;
-	*/
+
 	mutex_map.release();
 	return 0;
 }
@@ -74,7 +65,7 @@ int
 Ads_Service_Base_TP_Adaptive::extend_threadpool(int extend_size) {
 	mutex_map.acquire();
 
-	this->signal_worker_start = 0; //might be removerd, since all theads will get stuck due to mutex
+	this->signal_worker_start = 0;
 	size_t start_index        = n_threads_;
 	n_threads_                += extend_size;
 
@@ -93,16 +84,8 @@ Ads_Service_Base_TP_Adaptive::extend_threadpool(int extend_size) {
 	}
 	
 	std::cout << "extend thread_pool size: " <<  (int)n_threads_<< std::endl;
-	/*
-	std::cout << "\nafter extend, allthreads:" <<std::endl;
-	std::unordered_map<pthread_t, int>::iterator it = thread_ids_map.begin();
-	while(it != thread_ids_map.end()) {
-		std::cout << it->first << " ";
-		it ++;
-	}
-	std::cout << "extend_end()\n" <<std::endl;
-	*/
-	this->signal_worker_start = 1; //might be removerd
+
+	this->signal_worker_start = 1; 
 
 	mutex_map.release();
 	return 0;
@@ -132,9 +115,11 @@ int
 Ads_Service_Base_TP_Adaptive::open() {
 	/* worker thread initial */
 	#if defined(ADS_ENABLE_SEARCH) || defined(ADS_ENABLE_MACOSX)
+	
 	pthread_attr_t _attr;
 	pthread_attr_init(&_attr);
 	pthread_attr_setstacksize(&_attr, 0x4000000); //64M
+	
 	#endif
 
 	for (size_t i = 0; i < n_threads_; ++ i) {
@@ -149,16 +134,6 @@ Ads_Service_Base_TP_Adaptive::open() {
 		if (ret != 0) std::cout << "failed to create thread " << pth_id << std::endl;
 		thread_ids_map[pth_id] = 0;
 	}
-	/*
-	std::cout << "open() thread_pool size: " << (int)n_threads_ << std::endl;
-	std::cout << "\nallthreads:" <<std::endl;
-	std::unordered_map<pthread_t, int>::iterator it = thread_ids_map.begin();
-	while(it != thread_ids_map.end()) {
-		std::cout << it->first << " ";
-		it ++;
-	}
-	std::cout << "open_end()\n" <<std::endl;
-	*/
 
 	/* make worker start to work */
 	this->signal_worker_start = 1;
@@ -216,7 +191,6 @@ Ads_Service_Base_TP_Adaptive::release_message(Ads_Message_Base *msg) {
 			break;
 		default:
 			std::cout << "invalid message" << msg->type() << std::endl;
-			//ADS_DEBUG((LP_ERROR, "invalid message %d\n", msg->type()));
 			//ADS_ASSERT(0);
 			break;
 	}
@@ -272,7 +246,7 @@ Ads_Service_Base_TP_Adaptive::svc() {
 			if(this->thread_status_set(pthread_self(), 1))
 				std::cout << "set thread status failed 1 " << std::endl;
 
-		int dispatch_return = this->dispatch_message(msg);
+		int dispatch_return = this->dispatch_message(msg);		
 		/* terminate current thread */
 		if (dispatch_return == SIGNAL_EXIT_THREAD) {
 			msg->destroy();
