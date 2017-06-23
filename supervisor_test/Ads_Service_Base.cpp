@@ -343,6 +343,7 @@ Ads_Service_Base_Supervisor::supervisor_func_run(void *arg) {
 	return 0;
 }
 
+/* changed the all_threads == LIMIT, not test yet */
 int
 Ads_Service_Base_Supervisor::supervisor_func() {
 	while (!this->signal_supervisor_start)
@@ -379,7 +380,17 @@ Ads_Service_Base_Supervisor::supervisor_func() {
 		int curtail_sum        = idle_thread_count / TP_MODIFY_CURTAIL_SCALE;
 		int modify_thread_size = extend_sum - curtail_sum;
 
-		if (all_threads_size == THREAD_LMIT) continue;
+		if (all_threads_size == THREAD_LMIT) {
+			for (int i = 0; i < (int)n_tp_; ++ i) {
+				if (tp_modification[i] < 0) {
+					int to_curtail = (-1 * tp_modification[i]) / TP_MODIFY_CURTAIL_SCALE;
+					std::cout << "\n++++++++++++++++++++++ Thread_Pool:(LIMIT reached) " << i << " try curtail( " << to_curtail << " )" << std::endl;
+					if (to_curtail > 0 && tp_group[i]->tp_size() >= (to_curtail + TP_MIN_THRESHOLD))
+						tp_group[i]->curtail_threadpool(to_curtail);
+				}
+			}
+			continue;
+		};
 		else if (all_threads_size + modify_thread_size > THREAD_LMIT) {
 			extend_sum       = (THREAD_LMIT - all_threads_size) * extend_sum / modify_thread_size;
 			curtail_sum      = extend_sum - (THREAD_LMIT - all_threads_size);
